@@ -1,0 +1,22 @@
+0000000000000000000000000000000000000000 1574e7353e401bb023907a3db44b2c2e12682e38 NaijaB0T <femivideograph@gmail.com> 1752054039 +0100	clone: from https://github.com/NaijaB0T/react-router-hono-fullstack-template.git
+1574e7353e401bb023907a3db44b2c2e12682e38 b2b0411b16d597f8d88ac4f0abf26bedbf23d4b2 NaijaB0T <femivideograph@gmail.com> 1752061566 +0100	commit: Working Push
+b2b0411b16d597f8d88ac4f0abf26bedbf23d4b2 195cd47895a40259c525821ff1b8f81aca97efc6 NaijaB0T <femivideograph@gmail.com> 1752107392 +0100	commit: Copyable link
+195cd47895a40259c525821ff1b8f81aca97efc6 498259435a83f88f1b7ff209a256cc8210f4f7cb NaijaB0T <femivideograph@gmail.com> 1752128782 +0100	commit: fix frontend pause resume upload
+498259435a83f88f1b7ff209a256cc8210f4f7cb d953c138b93bbbfb922a84f3a86a1cf388b36149 NaijaB0T <femivideograph@gmail.com> 1752199589 +0100	commit: Changed to a free 15gb service for 24 hours
+d953c138b93bbbfb922a84f3a86a1cf388b36149 4fe594f611ecdd05c1da4a57d4e1437006cd963d NaijaB0T <femivideograph@gmail.com> 1752200747 +0100	commit: Fixed sql migration, now upload works properly
+4fe594f611ecdd05c1da4a57d4e1437006cd963d be7596d41c49db84b4d20b30814b22da1db97a01 NaijaB0T <femivideograph@gmail.com> 1752202931 +0100	commit: fixed resummability
+be7596d41c49db84b4d20b30814b22da1db97a01 efe2b9bd980af4436f538ed626d468b042ae988b NaijaB0T <femivideograph@gmail.com> 1752203678 +0100	commit: after browser refresh, convert upload to fresh upload
+efe2b9bd980af4436f538ed626d468b042ae988b 0fa64eb0e3e63e67a49a5b476ab326dbc53d40c8 NaijaB0T <femivideograph@gmail.com> 1752204025 +0100	commit: Allow npm build in local settings and re-add cron job
+0fa64eb0e3e63e67a49a5b476ab326dbc53d40c8 9ed3b65dfef706a757e1b55be4bfd4ca9159c81b NaijaB0T <femivideograph@gmail.com> 1752206362 +0100	commit: file page loop error fixed
+9ed3b65dfef706a757e1b55be4bfd4ca9159c81b 1d18778a798796981ce216eeac4c1c2f775120ef NaijaB0T <femivideograph@gmail.com> 1752207301 +0100	commit: Enhance file upload with concurrent chunk uploads and progress
+1d18778a798796981ce216eeac4c1c2f775120ef 2f992c7b9aaf601cc6e18133ca470f59c059d169 NaijaB0T <femivideograph@gmail.com> 1752207747 +0100	commit: feat: Implement real-time upload progress tracking for file chunks
+2f992c7b9aaf601cc6e18133ca470f59c059d169 c5ff3366b199a11fd1baaaf57236b71532d5f6b8 NaijaB0T <femivideograph@gmail.com> 1752208424 +0100	commit: Fix: Improve pause/abort handling in multipart upload
+c5ff3366b199a11fd1baaaf57236b71532d5f6b8 66e14db8215ab10bb9c44dd70688e9497bbb667c NaijaB0T <femivideograph@gmail.com> 1752212928 +0100	commit: Refactor TransferForm success state UI
+66e14db8215ab10bb9c44dd70688e9497bbb667c 74c6684874ba1d54ddcd2d3d2648cafc43e51cdc NaijaB0T <femivideograph@gmail.com> 1752220125 +0100	commit: feat: Enhance UI, add fonts, and improve file transfer details
+74c6684874ba1d54ddcd2d3d2648cafc43e51cdc d597f1318f20c66c67e1d43cbc392f14b6af1ad8 NaijaB0T <femivideograph@gmail.com> 1752223655 +0100	commit: Refactor UI and messaging for storage and file transfer
+d597f1318f20c66c67e1d43cbc392f14b6af1ad8 be2f963277a7c9602a427775d20219715ec6806b NaijaB0T <femivideograph@gmail.com> 1752226408 +0100	commit: feat: Implement authentication and update header with login/logout
+be2f963277a7c9602a427775d20219715ec6806b 58c3adbc9bf211da73112ba8af452911060ba3c3 NaijaB0T <femivideograph@gmail.com> 1752232177 +0100	commit: feat: Add account page and navigation, integrate OpenAuth client
+58c3adbc9bf211da73112ba8af452911060ba3c3 0579752bc2883e1a2263d2698176639f61cd93ab NaijaB0T <femivideograph@gmail.com> 1752237040 +0100	commit: feat: Implement file management and credit transaction history
+0579752bc2883e1a2263d2698176639f61cd93ab 2e4dd26ad01cd616e8078ab73016e05886d61e82 NaijaB0T <femivideograph@gmail.com> 1752237318 +0100	commit: feat: Use environment-specific client ID for OpenAuth
+2e4dd26ad01cd616e8078ab73016e05886d61e82 e50b01b701acc42c09f1052ec47fbcfe77b016bc NaijaB0T <femivideograph@gmail.com> 1752238112 +0100	commit: Refactor: Remove environment-specific client ID logic
+e50b01b701acc42c09f1052ec47fbcfe77b016bc 107cfc11be82e1109ef4c5c4716a4f6f893f53fe NaijaB0T <femivideograph@gmail.com> 1752239430 +0100	commit: Fix: Handle auth callback errors and invalid states
