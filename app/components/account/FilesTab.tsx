@@ -267,7 +267,7 @@ export function FilesTab() {
                 <select
                   value={extensionDays}
                   onChange={(e) => setExtensionDays(parseInt(e.target.value))}
-                  className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                  className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-black"
                 >
                   <option value={1}>1 Day</option>
                   <option value={3}>3 Days</option>
