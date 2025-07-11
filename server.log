@@ -1,0 +1,39 @@
+
+> dev
+> react-router dev
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  Debug:   http://localhost:5173/__debug
+Auth route hit: GET http://localhost:5173/api/auth/password/authorize?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=login
+
+Rewriting path: /api/auth/password/authorize -> /password/authorize
+
+<-- GET /password/authorize?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=login
+
+--> GET /password/authorize?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=login [32m200[0m 3ms
+
+Auth route hit: GET http://localhost:5173/api/auth/password/authorize?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=login
+
+Rewriting path: /api/auth/password/authorize -> /password/authorize
+
+<-- GET /password/authorize?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=login
+
+--> GET /password/authorize?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=login [32m200[0m 0ms
+
+Auth route hit: GET http://localhost:5173/api/auth/password/register?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=register
+
+Rewriting path: /api/auth/password/register -> /password/register
+
+<-- GET /password/register?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=register
+
+--> GET /password/register?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=register [32m200[0m 165ms
+
+Auth route hit: GET http://localhost:5173/api/auth/password/register?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=register
+
+Rewriting path: /api/auth/password/register -> /password/register
+
+<-- GET /password/register?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=register
+
+--> GET /password/register?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=register [32m200[0m 35ms
+

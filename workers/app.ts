@@ -5,6 +5,23 @@ import { cors } from "hono/cors";
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Helper function to get or create user
+async function getOrCreateUser(env: Env, email: string): Promise<string> {
+  const result = await env.DB.prepare(
+    `INSERT INTO users (id, email, credits, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (email) DO UPDATE SET email = email
+     RETURNING id;`
+  )
+    .bind(crypto.randomUUID(), email, 0, Date.now(), Date.now())
+    .first<{ id: string }>();
+  if (!result) {
+    throw new Error(`Unable to process user: ${email}`);
+  }
+  console.log(`Found or created user ${result.id} with email ${email}`);
+  return result.id;
+}
+
 // Enable CORS for API routes
 app.use('/api/*', cors());
 
@@ -38,6 +55,139 @@ const PaymentVerifySchema = z.object({
 const ExtendFileSchema = z.object({
   fileId: z.string(),
   days: z.number().int().min(1).max(365) // Max 1 year extension
+});
+
+// Auth Routes
+
+// Helper function to handle OpenAuth requests
+async function handleOpenAuth(c: any) {
+  console.log(`Auth route hit: ${c.req.method} ${c.req.url}`);
+  try {
+    // Dynamic import to avoid Vite issues
+    const { issuer } = await import("@openauthjs/openauth");
+    const { CloudflareStorage } = await import("@openauthjs/openauth/storage/cloudflare");
+    const { PasswordProvider } = await import("@openauthjs/openauth/provider/password");
+    const { PasswordUI } = await import("@openauthjs/openauth/ui/password");
+    const { createSubjects } = await import("@openauthjs/openauth/subject");
+    const { object, string } = await import("valibot");
+
+    // Create subjects configuration
+    const subjects = createSubjects({
+      user: object({
+        id: string(),
+        email: string(),
+      }),
+    });
+
+    // Simple path rewrite: /api/auth/xxx -> /xxx
+    const originalUrl = new URL(c.req.url);
+    const rewrittenPath = originalUrl.pathname.replace('/api/auth', '');
+    const rewrittenUrl = new URL(rewrittenPath + originalUrl.search, originalUrl.origin);
+    
+    console.log(`Rewriting path: ${originalUrl.pathname} -> ${rewrittenPath}`);
+    
+    // Create a new request with the rewritten URL
+    const rewrittenRequest = new Request(rewrittenUrl, {
+      method: c.req.method,
+      headers: c.req.raw.headers,
+      body: c.req.raw.body,
+    });
+
+    const issuerResponse = await issuer({
+      storage: CloudflareStorage({
+        namespace: c.env.AUTH_STORAGE,
+      }),
+      subjects,
+      providers: {
+        password: PasswordProvider(
+          PasswordUI({
+            sendCode: async (email, code) => {
+              console.log(`Sending code ${code} to ${email}`);
+            },
+            copy: {
+              input_code: "Code (check logs)",
+            },
+          }),
+        ),
+      },
+      theme: {
+        title: "NaijaSender Auth",
+        primary: "#0051c3",
+      },
+      success: async (ctx, value) => {
+        const userId = await getOrCreateUser(c.env, value.email);
+        console.log(`Authentication successful for user ${userId} (${value.email})`);
+        
+        // Instead of redirecting externally, redirect to the main app
+        return new Response(null, {
+          status: 302,
+          headers: {
+            'Location': '/?auth=success',
+            'Set-Cookie': `auth_user=${JSON.stringify({id: userId, email: value.email})}; Path=/; HttpOnly; SameSite=Lax`
+          }
+        });
+      },
+    }).fetch(rewrittenRequest, c.env, c.executionCtx);
+    
+    return issuerResponse;
+  } catch (error) {
+    console.error("OpenAuth error:", error);
+    return c.json({ error: "Authentication error" }, 500);
+  }
+}
+
+// Chrome DevTools route (prevent noise in logs)
+app.all("/.well-known/appspecific/com.chrome.devtools.json", (c) => new Response(null, { status: 204 }));
+
+// OpenAuth endpoints - multiple patterns to catch all routes
+app.all("/api/auth/password/authorize", handleOpenAuth);
+app.all("/api/auth/password/register", handleOpenAuth);
+app.all("/api/auth/password/*", handleOpenAuth);
+app.all("/api/auth/*", handleOpenAuth);
+
+// Logout endpoint - clears the auth cookie
+app.post("/api/logout", async (c) => {
+  return new Response(JSON.stringify({ success: true }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Set-Cookie': 'auth_user=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
+    }
+  });
+});
+
+// No callback routes needed - OpenAuth handles everything internally
+
+// User info endpoint - reads from cookie
+app.get("/api/userinfo", async (c) => {
+  // Get user data from cookie
+  const authCookie = c.req.header("Cookie");
+  const authUserMatch = authCookie?.match(/auth_user=([^;]+)/);
+  
+  if (!authUserMatch) {
+    return c.json({ error: "No authentication found" }, 401);
+  }
+  
+  try {
+    const userData = JSON.parse(decodeURIComponent(authUserMatch[1]));
+    
+    // Get full user data from database
+    const user = await c.env.DB.prepare(
+      `SELECT * FROM users WHERE id = ?`
+    ).bind(userData.id).first();
+    
+    if (!user) {
+      return c.json({ error: "User not found" }, 404);
+    }
+    
+    return c.json({
+      id: user.id,
+      email: user.email,
+      credits: user.credits
+    });
+  } catch (error) {
+    console.error("Error parsing auth cookie:", error);
+    return c.json({ error: "Invalid authentication" }, 401);
+  }
 });
 
 // API Routes

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
-const AUTH_BASE_URL = "https://openauth-template.femivideograph.workers.dev";
+const AUTH_BASE_URL = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
 
 interface AuthUser {
   id: string;
@@ -21,11 +21,42 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isClient, setIsClient] = useState(false);
+
+  // Set isClient to true after hydration to prevent SSR/hydration mismatches
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const checkAuth = async () => {
     try {
-      // Only check localStorage in the browser
-      if (typeof window !== "undefined") {
+      // Only check in the browser and after client hydration
+      if (isClient && typeof window !== "undefined") {
+        // Check if we just came back from successful auth
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('auth') === 'success') {
+          // Clear the URL parameter
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        
+        // Try to get user info from the server (which reads the HttpOnly cookie)
+        try {
+          const response = await fetch(`${AUTH_BASE_URL}/api/userinfo`, {
+            credentials: 'include', // Important: include cookies
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            setUser(userData);
+            // Also store in localStorage for offline access
+            localStorage.setItem("auth_user", JSON.stringify(userData));
+            return;
+          }
+        } catch (fetchError) {
+          console.log("No server auth found, checking localStorage");
+        }
+        
+        // Fallback to localStorage if server check fails
         const userData = localStorage.getItem("auth_user");
         if (userData) {
           setUser(JSON.parse(userData));
@@ -43,32 +74,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = () => {
-    // Redirect to OpenAuth login
-    const authUrl = new URL(`${AUTH_BASE_URL}/password/authorize`);
-    authUrl.searchParams.set("client_id", "naijasender-webapp");
-    authUrl.searchParams.set("redirect_uri", window.location.origin + "/auth/callback");
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("state", "login");
-    
-    window.location.href = authUrl.toString();
+    // Direct navigation to login page - OpenAuth handles everything internally
+    window.location.href = `${AUTH_BASE_URL}/api/auth/password/authorize`;
   };
 
   const register = () => {
-    // Redirect to OpenAuth registration
-    const authUrl = new URL(`${AUTH_BASE_URL}/password/register`);
-    authUrl.searchParams.set("client_id", "naijasender-webapp");
-    authUrl.searchParams.set("redirect_uri", window.location.origin + "/auth/callback");
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("state", "register");
-    
-    window.location.href = authUrl.toString();
+    // Direct navigation to register page - OpenAuth handles everything internally  
+    window.location.href = `${AUTH_BASE_URL}/api/auth/password/register`;
   };
 
-  const logout = () => {
+  const logout = async () => {
     if (typeof window !== "undefined") {
+      // Clear localStorage
       localStorage.removeItem("auth_user");
+      
+      // Clear server-side cookie by making a logout request
+      try {
+        await fetch(`${AUTH_BASE_URL}/api/logout`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+      } catch (error) {
+        console.log("Logout request failed, but clearing local state anyway");
+      }
     }
     setUser(null);
+  };
+
+  // Function to handle auth code from popup
+  const handleAuthCode = async (code: string) => {
+    try {
+      // Exchange code for tokens using the local mock token endpoint
+      const tokenResponse = await fetch(`${AUTH_BASE_URL}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: code,
+          client_id: 'naijasender-webapp',
+          redirect_uri: AUTH_BASE_URL + '/callback'
+        })
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error('Token exchange failed');
+      }
+
+      const tokens = await tokenResponse.json();
+      
+      // For now, create mock user data since we have a working auth flow
+      const userData = {
+        id: `user-${Date.now()}`,
+        email: "user@example.com" // In real implementation, get this from token
+      };
+      
+      setAuthUser(userData);
+    } catch (error) {
+      console.error('Auth code handling failed:', error);
+    }
   };
 
   // Function to set user after successful auth
@@ -78,7 +143,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    checkAuth();
+    if (isClient) {
+      checkAuth();
+    }
+  }, [isClient]);
+
+  useEffect(() => {
+    if (!isClient) return;
     
     // Listen for storage changes (including from other tabs or manual updates)
     const handleStorageChange = (e: StorageEvent) => {
@@ -100,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.addEventListener('storage', handleStorageChange);
       return () => window.removeEventListener('storage', handleStorageChange);
     }
-  }, []);
+  }, [isClient]);
 
   const value: AuthContextType = {
     user,

@@ -5,6 +5,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "naijatransfer",
   "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
   "main": "./workers/app.ts",
   "vars": {
     "RESEND_API_KEY": "re_TCScdzqZ_B65rfNYd68eUDmb4QzcameCe",
@@ -22,6 +23,12 @@
     {
       "binding": "FILE_BUCKET",
       "bucket_name": "naijatransfer-files"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "AUTH_STORAGE",
+      "id": "7e58c31a1a194dd39b9ebb0d702ca4c2"
     }
   ],
   "observability": {

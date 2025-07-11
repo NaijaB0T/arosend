@@ -48,7 +48,7 @@ export default function AuthCallback() {
         // Use OpenAuth client to exchange the code
         const authClient = createClient({
           clientID: "naijasender-webapp",
-          issuer: "https://openauth-template.femivideograph.workers.dev",
+          issuer: "http://127.0.0.1:8787",
         });
 
         const result = await authClient.exchange(code, window.location.origin + "/auth/callback");
