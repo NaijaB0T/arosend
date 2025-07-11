@@ -203,10 +203,24 @@ app.post("/api/transfers", async (c) => {
     const validatedData = CreateTransferSchema.parse(body);
     console.log('Validation successful');
     
-    // Check if user is authenticated
-    const authHeader = c.req.header('Authorization');
-    const userId = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const isAuthenticated = !!userId;
+    // Check if user is authenticated via cookie
+    const authCookie = c.req.header("Cookie");
+    const authUserMatch = authCookie?.match(/auth_user=([^;]+)/);
+    let userId = null;
+    let isAuthenticated = false;
+    
+    if (authUserMatch) {
+      try {
+        const userData = JSON.parse(decodeURIComponent(authUserMatch[1]));
+        userId = userData.id;
+        isAuthenticated = true;
+        console.log(`Transfer being created by authenticated user: ${userId} (${userData.email})`);
+      } catch (error) {
+        console.log("Invalid auth cookie format");
+      }
+    } else {
+      console.log("Transfer being created by anonymous user");
+    }
     
     const transferId = crypto.randomUUID();
     const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours from now
