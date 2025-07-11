@@ -924,7 +924,7 @@ app.post("/api/payments/initialize", async (c) => {
         email: validatedData.email,
         amount: validatedData.amount,
         reference: reference,
-        callback_url: `${c.env.BASE_URL}/account?payment=success`,
+        callback_url: `${new URL(c.req.url).origin}/account?payment=success`,
         metadata: {
           userId: userId,
           transactionId: transactionId,
@@ -1063,7 +1063,7 @@ app.post("/api/webhooks/paystack", async (c) => {
       const reference = event.data.reference;
       
       // Verify and process payment
-      await fetch(`${c.env.BASE_URL}/api/payments/verify`, {
+      await fetch(`${new URL(c.req.url).origin}/api/payments/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reference })
