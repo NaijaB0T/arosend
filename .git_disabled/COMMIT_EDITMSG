@@ -1,3 +1,0 @@
-Fix: Handle auth callback errors and invalid states
-
-This commit enhances the auth callback route to handle errors, missing codes, and invalid state parameters. It also clears any existing auth data to prevent conflicts and improve the user experience.
