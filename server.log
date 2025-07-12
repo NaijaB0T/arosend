@@ -37,3 +37,17 @@ Rewriting path: /api/auth/password/register -> /password/register
 
 --> GET /password/register?client_id=naijasender-webapp&redirect_uri=http://localhost:5173/api/auth/callback&response_type=code&state=register [32m200[0m 35ms
 
+error running 
+
+Error: Failed to load url /app/routes/auth.login.tsx (resolved id: /app/routes/auth.login.tsx) in 
+
+Error: Failed to load url /app/routes/auth.login.tsx (resolved id: /app/routes/auth.login.tsx) in 
+
+Error: Failed to load url /app/routes/auth.login.tsx (resolved id: /app/routes/auth.login.tsx) in 
+
+Error: Failed to load url /app/routes/auth.login.tsx (resolved id: /app/routes/auth.login.tsx) in 
+
+Error: Failed to load url /app/routes/auth.login.tsx (resolved id: /app/routes/auth.login.tsx) in 
+
+Error: Failed to load url /app/routes/auth.login.tsx (resolved id: /app/routes/auth.login.tsx) in 
+

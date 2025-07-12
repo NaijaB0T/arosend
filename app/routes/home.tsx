@@ -13,23 +13,24 @@ export function meta({}: Route.MetaArgs) {
 export default function Home() {
   return (
     <BackgroundManager>
-      {/* WeTransfer-inspired layout */}
-      <div className="h-screen overflow-hidden">
+      <div className="min-h-screen">
         <Header />
 
         {/* Main content area */}
-        <div className="flex items-center justify-center h-full px-4 md:px-6 py-8 md:pb-20 md:pl-12 overflow-y-auto">
-          <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+        <div className="px-4 md:px-6 py-4 md:py-8 pb-20">
+          <div className="w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start min-h-[calc(100vh-120px)] lg:min-h-[calc(100vh-160px)]">
             
             {/* Left side - Transfer widget */}
-            <div className="order-2 lg:order-1 lg:col-span-1">
-              <div className="bg-white rounded-2xl shadow-xl p-4 md:p-5 w-full max-w-sm mx-auto lg:mx-0 max-h-[70vh] lg:max-h-[calc(100vh-200px)] overflow-y-auto scrollable-widget">
-                <TransferForm />
+            <div className="order-2 lg:order-1 lg:col-span-1 flex items-start justify-center lg:justify-start">
+              <div className="bg-white rounded-2xl shadow-xl p-4 md:p-5 w-full max-w-sm mx-auto lg:mx-0 lg:sticky lg:top-6">
+                <div className="max-h-[70vh] overflow-y-auto scrollable-widget">
+                  <TransferForm />
+                </div>
               </div>
             </div>
 
             {/* Right side - Headline and CTA */}
-            <div className="order-1 lg:order-2 lg:col-span-2 text-center lg:text-left lg:pl-8">
+            <div className="order-1 lg:order-2 lg:col-span-2 text-center lg:text-left lg:pl-8 flex flex-col justify-center">
               <h1 className="text-2xl md:text-4xl lg:text-5xl xl:text-6xl font-serif font-bold text-white mb-3 md:mb-4 leading-tight">
                 Store & Send Big Files
               </h1>

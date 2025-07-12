@@ -74,12 +74,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = () => {
-    // Direct navigation to login page - OpenAuth handles everything internally
+    // Direct navigation to OpenAuth login
     window.location.href = `${AUTH_BASE_URL}/api/auth/password/authorize`;
   };
 
   const register = () => {
-    // Direct navigation to register page - OpenAuth handles everything internally  
+    // Direct navigation to OpenAuth register
     window.location.href = `${AUTH_BASE_URL}/api/auth/password/register`;
   };
 

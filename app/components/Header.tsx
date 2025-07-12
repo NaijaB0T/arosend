@@ -51,18 +51,18 @@ export function Header() {
             </>
           ) : (
             <>
-              <Link 
-                to="/auth/login"
+              <a 
+                href="/api/auth/password/authorize"
                 className="text-white hover:opacity-80 transition-opacity px-4 py-2 font-light text-base"
               >
                 Log in
-              </Link>
-              <Link 
-                to="/auth/register"
+              </a>
+              <a 
+                href="/api/auth/password/register"
                 className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-light text-base"
               >
                 Sign Up
-              </Link>
+              </a>
             </>
           )}
         </div>
@@ -120,20 +120,20 @@ export function Header() {
                 </>
               ) : (
                 <>
-                  <Link 
-                    to="/auth/login"
+                  <a 
+                    href="/api/auth/password/authorize"
                     className="block text-white hover:opacity-80 transition-opacity py-2 font-light"
                     onClick={closeMenu}
                   >
                     Log in
-                  </Link>
-                  <Link 
-                    to="/auth/register"
+                  </a>
+                  <a 
+                    href="/api/auth/password/register"
                     className="block bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-light text-center"
                     onClick={closeMenu}
                   >
                     Sign Up
-                  </Link>
+                  </a>
                 </>
               )}
             </div>

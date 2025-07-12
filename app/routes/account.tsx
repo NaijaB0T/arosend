@@ -53,12 +53,12 @@ export default function Account() {
         <Header />
         
         {/* Main content area */}
-        <div className="px-4 md:px-6 py-6 md:py-8 pb-20">
+        <div className="px-4 md:px-6 py-4 md:py-8 pb-20">
           <div className="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8 items-start">
             
             {/* Left side - Transfer widget */}
             <div className="order-2 lg:order-1 lg:col-span-1">
-              <div className="bg-white rounded-2xl shadow-xl p-4 md:p-5 w-full max-w-sm mx-auto lg:mx-0 sticky top-6">
+              <div className="bg-white rounded-2xl shadow-xl p-4 md:p-5 w-full max-w-sm mx-auto lg:mx-0 lg:sticky lg:top-6">
                 <div className="max-h-[70vh] overflow-y-auto scrollable-widget">
                   <TransferForm />
                 </div>

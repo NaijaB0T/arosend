@@ -111,8 +111,25 @@ async function handleOpenAuth(c: any) {
         ),
       },
       theme: {
-        title: "NaijaSender Auth",
-        primary: "#0051c3",
+        title: "Àrokò",
+        primary: "#4f46e5",
+        favicon: "https://workers.cloudflare.com/favicon.ico",
+        logo: {
+          dark: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjUwIiB2aWV3Qm94PSIwIDAgMjAwIDUwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWksIC1hcHBsZS1zeXN0ZW0sIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjMzMzMzMzIj7DgHJva8OyPC90ZXh0Pgo8L3N2Zz4K",
+          light: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjUwIiB2aWV3Qm94PSIwIDAgMjAwIDUwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWksIC1hcHBsZS1zeXN0ZW0sIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjMzMzMzMzIj7DgHJva8OyPC90ZXh0Pgo8L3N2Zz4K"
+        },
+        css: `
+          /* Style the logo/branding area */
+          .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 1rem 0;
+          }
+          
+          .logo img {
+            max-height: 60px;
+          }
+        `
       },
       success: async (ctx, value) => {
         const userId = await getOrCreateUser(c.env, value.email);
