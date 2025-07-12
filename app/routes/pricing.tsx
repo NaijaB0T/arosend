@@ -111,7 +111,7 @@ export default function Pricing() {
                 <select
                   value={sizeUnit}
                   onChange={(e) => setSizeUnit(e.target.value as 'MB' | 'GB')}
-                  className="px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="px-4 py-3 bg-black/60 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="MB">MB</option>
                   <option value="GB">GB</option>

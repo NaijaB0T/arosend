@@ -22,11 +22,10 @@ export function Header() {
         </Link>
         
         {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center space-x-8 text-white text-base">
-          <Link to="/home" className="hover:opacity-80 transition-opacity font-light">Storage</Link>
-          <Link to="/pricing" className="hover:opacity-80 transition-opacity font-light">Pricing</Link>
-          <Link to="/home" className="hover:opacity-80 transition-opacity font-light">Transfer</Link>
-          <a href="#" className="hover:opacity-80 transition-opacity font-light">Help</a>
+        <nav className="hidden lg:flex items-center space-x-1 text-white text-base">
+          <Link to="/features" className="px-4 py-2 rounded-lg hover:bg-white/10 transition-all font-medium">Features</Link>
+          <Link to="/pricing" className="px-4 py-2 rounded-lg hover:bg-white/10 transition-all font-medium">Pricing</Link>
+          <Link to="/help" className="px-4 py-2 rounded-lg hover:bg-white/10 transition-all font-medium">Help</Link>
         </nav>
         
         {/* Desktop Auth buttons */}
@@ -89,10 +88,9 @@ export function Header() {
           <nav className="p-4 space-y-4">
             {/* Navigation links */}
             <div className="space-y-3 pb-4 border-b border-white/10">
-              <Link to="/home" className="block text-white hover:opacity-80 transition-opacity font-light py-2" onClick={closeMenu}>Storage</Link>
-              <Link to="/pricing" className="block text-white hover:opacity-80 transition-opacity font-light py-2" onClick={closeMenu}>Pricing</Link>
-              <Link to="/home" className="block text-white hover:opacity-80 transition-opacity font-light py-2" onClick={closeMenu}>Transfer</Link>
-              <a href="#" className="block text-white hover:opacity-80 transition-opacity font-light py-2">Help</a>
+              <Link to="/features" className="block text-white hover:opacity-80 transition-opacity font-medium py-2" onClick={closeMenu}>Features</Link>
+              <Link to="/pricing" className="block text-white hover:opacity-80 transition-opacity font-medium py-2" onClick={closeMenu}>Pricing</Link>
+              <Link to="/help" className="block text-white hover:opacity-80 transition-opacity font-medium py-2" onClick={closeMenu}>Help</Link>
             </div>
             
             {/* Auth section */}
