@@ -5,7 +5,9 @@
       "Bash(wrangler d1 migrations apply:*)",
       "Bash(npm run build:*)",
       "Bash(npm install:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npx tsc:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }

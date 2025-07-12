@@ -23,9 +23,9 @@ export function Header() {
         
         {/* Desktop Navigation */}
         <nav className="hidden lg:flex items-center space-x-8 text-white text-base">
-          <a href="#" className="hover:opacity-80 transition-opacity font-light">Storage</a>
-          <a href="#" className="hover:opacity-80 transition-opacity font-light">Pricing</a>
-          <a href="#" className="hover:opacity-80 transition-opacity font-light">Transfer</a>
+          <Link to="/home" className="hover:opacity-80 transition-opacity font-light">Storage</Link>
+          <Link to="/pricing" className="hover:opacity-80 transition-opacity font-light">Pricing</Link>
+          <Link to="/home" className="hover:opacity-80 transition-opacity font-light">Transfer</Link>
           <a href="#" className="hover:opacity-80 transition-opacity font-light">Help</a>
         </nav>
         
@@ -89,9 +89,9 @@ export function Header() {
           <nav className="p-4 space-y-4">
             {/* Navigation links */}
             <div className="space-y-3 pb-4 border-b border-white/10">
-              <a href="#" className="block text-white hover:opacity-80 transition-opacity font-light py-2">Storage</a>
-              <a href="#" className="block text-white hover:opacity-80 transition-opacity font-light py-2">Pricing</a>
-              <a href="#" className="block text-white hover:opacity-80 transition-opacity font-light py-2">Transfer</a>
+              <Link to="/home" className="block text-white hover:opacity-80 transition-opacity font-light py-2" onClick={closeMenu}>Storage</Link>
+              <Link to="/pricing" className="block text-white hover:opacity-80 transition-opacity font-light py-2" onClick={closeMenu}>Pricing</Link>
+              <Link to="/home" className="block text-white hover:opacity-80 transition-opacity font-light py-2" onClick={closeMenu}>Transfer</Link>
               <a href="#" className="block text-white hover:opacity-80 transition-opacity font-light py-2">Help</a>
             </div>
             

@@ -23,6 +23,18 @@ interface Transaction {
   updated_at: number;
 }
 
+interface PaymentVerificationResponse {
+  status: string;
+}
+
+interface CreditsResponse {
+  credits: number;
+}
+
+interface TransactionsResponse {
+  transactions: Transaction[];
+}
+
 export function CreditsTab() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,7 +75,7 @@ export function CreditsTab() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: PaymentVerificationResponse = await response.json();
         if (data.status === 'success') {
           setPaymentSuccess(true);
           fetchCredits(); // Refresh credits balance
@@ -97,7 +109,7 @@ export function CreditsTab() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: CreditsResponse = await response.json();
         setCredits(data.credits || 0);
       }
     } catch (error) {
@@ -128,7 +140,7 @@ export function CreditsTab() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: TransactionsResponse = await response.json();
         setTransactions(data.transactions || []);
       }
     } catch (error) {

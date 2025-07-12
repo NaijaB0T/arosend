@@ -69,13 +69,13 @@ class NetworkAdapter {
     
     let baseChunkSize: number;
     if (fileSize < 100 * MB) {
-      baseChunkSize = 5 * MB;
+      baseChunkSize = 3 * MB; // Smaller for better reliability on poor networks
     } else if (fileSize < 1 * GB) {
-      baseChunkSize = 10 * MB;
+      baseChunkSize = 5 * MB; // Reduced from 10MB
     } else if (fileSize < 10 * GB) {
-      baseChunkSize = 25 * MB;
+      baseChunkSize = 10 * MB; // Reduced from 25MB for Nigerian networks
     } else {
-      baseChunkSize = 50 * MB;
+      baseChunkSize = 20 * MB; // Reduced from 50MB for very large files
     }
     
     let speedMultiplier = 1;
@@ -83,12 +83,13 @@ class NetworkAdapter {
       case 'excellent': speedMultiplier = 2.0; break;
       case 'good': speedMultiplier = 1.5; break;
       case 'fair': speedMultiplier = 1.0; break;
-      case 'poor': speedMultiplier = 0.5; break;
-      case 'unstable': speedMultiplier = 0.25; break;
+      case 'poor': speedMultiplier = 0.6; break; // Slightly increased from 0.5
+      case 'unstable': speedMultiplier = 0.3; break; // Increased from 0.25 for better reliability
     }
     
     const adaptiveChunkSize = Math.round(baseChunkSize * speedMultiplier);
-    return Math.max(1 * MB, Math.min(100 * MB, adaptiveChunkSize));
+    // Lower minimum for very poor connections, reasonable maximum
+    return Math.max(1 * MB, Math.min(50 * MB, adaptiveChunkSize));
   }
   
   getAdaptiveConcurrency(fileSize: number, totalChunks: number, isDevelopment: boolean): number {
@@ -97,16 +98,18 @@ class NetworkAdapter {
     
     let baseConcurrency: number;
     if (isDevelopment) {
-      baseConcurrency = Math.min(4, Math.max(2, Math.ceil(totalChunks * 0.1)));
+      // Very conservative for development to prevent server crashes
+      baseConcurrency = Math.min(3, Math.max(1, Math.ceil(totalChunks * 0.05)));
     } else {
+      // Production settings optimized for Nigerian networks
       if (fileSize < 100 * MB) {
-        baseConcurrency = Math.min(8, Math.max(4, totalChunks));
+        baseConcurrency = Math.min(4, Math.max(2, totalChunks)); // Reduced from 8
       } else if (fileSize < 1 * GB) {
-        baseConcurrency = Math.min(12, Math.max(6, Math.ceil(totalChunks * 0.15)));
+        baseConcurrency = Math.min(6, Math.max(3, Math.ceil(totalChunks * 0.1))); // Reduced
       } else if (fileSize < 10 * GB) {
-        baseConcurrency = Math.min(20, Math.max(8, Math.ceil(totalChunks * 0.1)));
+        baseConcurrency = Math.min(8, Math.max(4, Math.ceil(totalChunks * 0.08))); // More conservative
       } else {
-        baseConcurrency = Math.min(32, Math.max(12, Math.ceil(totalChunks * 0.05)));
+        baseConcurrency = Math.min(12, Math.max(6, Math.ceil(totalChunks * 0.04))); // Much more conservative
       }
     }
     
@@ -115,13 +118,14 @@ class NetworkAdapter {
       case 'excellent': qualityMultiplier = 1.5; break;
       case 'good': qualityMultiplier = 1.2; break;
       case 'fair': qualityMultiplier = 1.0; break;
-      case 'poor': qualityMultiplier = 0.7; break;
-      case 'unstable': qualityMultiplier = 0.4; break;
+      case 'poor': qualityMultiplier = 0.8; break; // Increased from 0.7 for better performance
+      case 'unstable': qualityMultiplier = 0.5; break; // Increased from 0.4 for reliability
     }
     
     const adaptiveConcurrency = Math.round(baseConcurrency * qualityMultiplier);
-    const maxConcurrency = isDevelopment ? 6 : 32;
-    const minConcurrency = isDevelopment ? 1 : 2;
+    // More conservative limits for Nigerian market
+    const maxConcurrency = isDevelopment ? 4 : 12; // Reduced from 6:32
+    const minConcurrency = 1; // Always allow at least 1
     
     return Math.max(minConcurrency, Math.min(maxConcurrency, adaptiveConcurrency));
   }
@@ -132,10 +136,12 @@ class NetworkAdapter {
       case 'excellent': qualityMultiplier = 0.5; break;
       case 'good': qualityMultiplier = 0.8; break;
       case 'fair': qualityMultiplier = 1.0; break;
-      case 'poor': qualityMultiplier = 2.0; break;
-      case 'unstable': qualityMultiplier = 4.0; break;
+      case 'poor': qualityMultiplier = 1.5; break; // Reduced from 2.0 for faster recovery
+      case 'unstable': qualityMultiplier = 3.0; break; // Reduced from 4.0
     }
-    return baseDelay * Math.pow(2, retryCount) * qualityMultiplier;
+    // Cap maximum retry delay at 30 seconds for better UX
+    const delay = baseDelay * Math.pow(2, retryCount) * qualityMultiplier;
+    return Math.min(delay, 30000);
   }
   
   async monitorAndAdapt(uploadStartTime: number, bytesUploaded: number) {

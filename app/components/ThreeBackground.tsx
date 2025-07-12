@@ -8,11 +8,11 @@ interface ThreeBackgroundProps {
 
 export function ThreeBackground({ uploadProgress = 0, isUploading = false }: ThreeBackgroundProps) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene>();
-  const rendererRef = useRef<THREE.WebGLRenderer>();
-  const particlesRef = useRef<THREE.Points>();
-  const dataPacketsRef = useRef<THREE.Group>();
-  const animationIdRef = useRef<number>();
+  const sceneRef = useRef<THREE.Scene>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer>(null);
+  const particlesRef = useRef<THREE.Points>(null);
+  const dataPacketsRef = useRef<THREE.Group>(null);
+  const animationIdRef = useRef<number>(0);
 
   useEffect(() => {
     if (!mountRef.current) return;

@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           
           if (response.ok) {
-            const userData = await response.json();
+            const userData: AuthUser = await response.json();
             setUser(userData);
             // Also store in localStorage for offline access
             localStorage.setItem("auth_user", JSON.stringify(userData));
@@ -97,6 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.log("Logout request failed, but clearing local state anyway");
       }
+      
+      // Redirect to home page after logout
+      window.location.href = '/';
     }
     setUser(null);
   };

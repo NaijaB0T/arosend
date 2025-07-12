@@ -37,7 +37,7 @@ export default function Account() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/auth/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   const tabs = [

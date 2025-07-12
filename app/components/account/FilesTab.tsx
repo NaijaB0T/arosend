@@ -23,6 +23,20 @@ interface FileExtension {
   created_at: number;
 }
 
+interface FilesResponse {
+  files: ManagedFile[];
+  message?: string;
+}
+
+interface ExtensionResponse {
+  cost_paid: number;
+  error?: string;
+}
+
+interface DeleteResponse {
+  error?: string;
+}
+
 export function FilesTab() {
   const { user } = useAuth();
   const [files, setFiles] = useState<ManagedFile[]>([]);
@@ -59,7 +73,7 @@ export function FilesTab() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: FilesResponse = await response.json();
         setFiles(data.files || []);
         
         // Show migration message if needed
@@ -155,7 +169,7 @@ export function FilesTab() {
         }),
       });
 
-      const data = await response.json();
+      const data: ExtensionResponse = await response.json();
       
       if (response.ok) {
         alert(`File extended successfully! ${data.cost_paid} credits deducted.`);
@@ -196,7 +210,7 @@ export function FilesTab() {
         alert("File deleted successfully");
         fetchFiles(); // Refresh file list
       } else {
-        const data = await response.json();
+        const data: DeleteResponse = await response.json();
         alert(data.error || "Failed to delete file");
       }
     } catch (error) {

@@ -3,6 +3,48 @@ import { createRequestHandler } from "react-router";
 import { z } from "zod";
 import { cors } from "hono/cors";
 
+// Database types
+interface DatabaseFile {
+  id: string;
+  filename: string;
+  filesize: number;
+  r2_object_key: string;
+  transfer_id: string;
+  user_id: string;
+  is_managed: number;
+  extended_until?: number;
+  transfer_status: string;
+  transfer_created_at: number;
+}
+
+interface DatabaseUser {
+  id: string;
+  email: string;
+  credits: number;
+  created_at: number;
+  updated_at: number;
+}
+
+interface PaystackInitResponse {
+  status: boolean;
+  message: string;
+  data?: {
+    authorization_url: string;
+    access_code: string;
+    reference: string;
+  };
+}
+
+interface PaystackVerifyResponse {
+  status: boolean;
+  message: string;
+  data?: {
+    status: string;
+    amount: number;
+    reference: string;
+  };
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 // Helper function to get or create user
@@ -59,6 +101,38 @@ const ExtendFileSchema = z.object({
 
 // Auth Routes
 
+// Helper function to send email via Resend
+async function sendEmailWithResend(apiKey: string, to: string, subject: string, html: string): Promise<boolean> {
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Àrokò <onboarding@aroko.femitaofeeq.com>',
+        to: [to],
+        subject: subject,
+        html: html,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('Resend API error:', response.status, errorData);
+      return false;
+    }
+
+    const result = await response.json() as { id: string };
+    console.log('Email sent successfully:', result.id);
+    return true;
+  } catch (error) {
+    console.error('Failed to send email:', error);
+    return false;
+  }
+}
+
 // Helper function to handle OpenAuth requests
 async function handleOpenAuth(c: any) {
   console.log(`Auth route hit: ${c.req.method} ${c.req.url}`);
@@ -102,10 +176,48 @@ async function handleOpenAuth(c: any) {
         password: PasswordProvider(
           PasswordUI({
             sendCode: async (email, code) => {
-              console.log(`Sending code ${code} to ${email}`);
+              console.log(`Sending verification code to ${email}`);
+              
+              const emailHtml = `
+                <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <div style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="color: #4f46e5; margin: 0;">Àrokò</h1>
+                    <p style="color: #666; margin: 5px 0 0 0;">Secure File Transfer</p>
+                  </div>
+                  
+                  <div style="background: #f8fafc; border-radius: 8px; padding: 30px; text-align: center;">
+                    <h2 style="color: #1f2937; margin: 0 0 20px 0;">Your Verification Code</h2>
+                    <div style="background: white; border: 2px solid #e5e7eb; border-radius: 6px; padding: 20px; margin: 20px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #4f46e5;">${code}</div>
+                    <p style="color: #6b7280; margin: 20px 0 0 0;">Enter this code to complete your registration or login.</p>
+                  </div>
+                  
+                  <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+                    <p style="color: #9ca3af; font-size: 14px; margin: 0;">
+                      This code will expire in 10 minutes. If you didn't request this code, please ignore this email.
+                    </p>
+                  </div>
+                </div>
+              `;
+              
+              if (c.env.RESEND_API_KEY) {
+                const success = await sendEmailWithResend(
+                  c.env.RESEND_API_KEY, 
+                  email, 
+                  'Your Àrokò Verification Code', 
+                  emailHtml
+                );
+                
+                if (!success) {
+                  console.error('Failed to send verification email, falling back to console log');
+                  console.log(`FALLBACK - Verification code for ${email}: ${code}`);
+                }
+              } else {
+                console.error('RESEND_API_KEY not configured, logging code instead');
+                console.log(`Verification code for ${email}: ${code}`);
+              }
             },
             copy: {
-              input_code: "Code (check logs)",
+              input_code: "Enter verification code",
             },
           }),
         ),
@@ -609,17 +721,17 @@ app.get("/api/files", async (c) => {
       LEFT JOIN transfers t ON f.transfer_id = t.id
       WHERE f.user_id = ? AND f.is_managed = 1
       ORDER BY f.created_at DESC
-    `).bind(userId).all();
+    `).bind(userId).all<DatabaseFile>();
     
     return c.json({ 
       files: files.results?.map(file => ({
         ...file,
         // Calculate current expiry (either original 24h or extended)
-        current_expiry: file.extended_until || (file.transfer_created_at + (24 * 60 * 60 * 1000)),
+        current_expiry: file.extended_until || ((file.transfer_created_at as number) + (24 * 60 * 60 * 1000)),
         // Calculate if file is expired
-        is_expired: (file.extended_until || (file.transfer_created_at + (24 * 60 * 60 * 1000))) < Date.now(),
+        is_expired: (file.extended_until || ((file.transfer_created_at as number) + (24 * 60 * 60 * 1000))) < Date.now(),
         // Calculate extension cost for 1 day
-        extension_cost_per_day: calculateExtensionCost(file.filesize, 1)
+        extension_cost_per_day: calculateExtensionCost(file.filesize as number, 1)
       })) || []
     });
     
@@ -647,30 +759,30 @@ app.post("/api/files/extend", async (c) => {
       FROM files f
       LEFT JOIN transfers t ON f.transfer_id = t.id
       WHERE f.id = ? AND f.user_id = ? AND f.is_managed = 1
-    `).bind(validatedData.fileId, userId).first();
+    `).bind(validatedData.fileId, userId).first<DatabaseFile>();
     
     if (!file) {
       return c.json({ error: 'File not found or not accessible' }, 404);
     }
     
     // Calculate extension cost
-    const extensionCost = calculateExtensionCost(file.filesize, validatedData.days);
+    const extensionCost = calculateExtensionCost(file.filesize as number, validatedData.days);
     
     // Check user's credit balance
     const user = await c.env.DB.prepare(`
       SELECT credits FROM users WHERE id = ?
-    `).bind(userId).first();
+    `).bind(userId).first<Pick<DatabaseUser, 'credits'>>();
     
-    if (!user || user.credits < extensionCost) {
+    if (!user || (user.credits as number) < extensionCost) {
       return c.json({ 
         error: 'Insufficient credits',
         required_credits: extensionCost,
-        current_credits: user?.credits || 0
+        current_credits: (user?.credits as number) || 0
       }, 400);
     }
     
     // Calculate new expiry date
-    const currentExpiry = file.extended_until || (file.transfer_created_at + (24 * 60 * 60 * 1000));
+    const currentExpiry = file.extended_until || ((file.transfer_created_at as number) + (24 * 60 * 60 * 1000));
     const newExpiry = Math.max(currentExpiry, Date.now()) + (validatedData.days * 24 * 60 * 60 * 1000);
     
     // Start transaction
@@ -726,7 +838,7 @@ app.post("/api/files/extend", async (c) => {
       success: true,
       new_expiry: newExpiry,
       cost_paid: extensionCost,
-      remaining_credits: user.credits - extensionCost
+      remaining_credits: (user.credits as number) - extensionCost
     });
     
   } catch (error) {
@@ -752,7 +864,7 @@ app.delete("/api/files/:fileId", async (c) => {
     // Get file details
     const file = await c.env.DB.prepare(`
       SELECT * FROM files WHERE id = ? AND user_id = ? AND is_managed = 1
-    `).bind(fileId, userId).first();
+    `).bind(fileId, userId).first<DatabaseFile>();
     
     if (!file) {
       return c.json({ error: 'File not found or not accessible' }, 404);
@@ -761,7 +873,7 @@ app.delete("/api/files/:fileId", async (c) => {
     // Delete file from R2
     if (file.r2_object_key) {
       try {
-        await c.env.FILE_BUCKET.delete(file.r2_object_key);
+        await c.env.FILE_BUCKET.delete(file.r2_object_key as string);
       } catch (error) {
         console.error('Error deleting file from R2:', error);
       }
@@ -832,7 +944,7 @@ app.get("/api/credits", async (c) => {
     // Get or create user
     let user = await c.env.DB.prepare(`
       SELECT * FROM users WHERE id = ?
-    `).bind(userId).first();
+    `).bind(userId).first<DatabaseUser>();
     
     if (!user) {
       // Create user if doesn't exist
@@ -841,7 +953,7 @@ app.get("/api/credits", async (c) => {
         VALUES (?, ?, ?, ?, ?)
       `).bind(userId, 'user@example.com', 0, Date.now(), Date.now()).run();
       
-      user = { id: userId, credits: 0 };
+      user = { id: userId, email: 'user@example.com', credits: 0, created_at: Date.now(), updated_at: Date.now() };
     }
     
     return c.json({ credits: user.credits || 0 });
@@ -968,7 +1080,7 @@ app.post("/api/payments/initialize", async (c) => {
       throw new Error('Paystack initialization failed');
     }
     
-    const paystackData = await paystackResponse.json();
+    const paystackData: PaystackInitResponse = await paystackResponse.json();
     
     // Create payment record
     await c.env.DB.prepare(`
@@ -1014,9 +1126,9 @@ app.post("/api/payments/verify", async (c) => {
       throw new Error('Paystack verification failed');
     }
     
-    const paystackData = await paystackResponse.json();
+    const paystackData: PaystackVerifyResponse = await paystackResponse.json();
     
-    if (paystackData.status && paystackData.data.status === 'success') {
+    if (paystackData.status && paystackData.data?.status === 'success') {
       // Get transaction
       const transaction = await c.env.DB.prepare(`
         SELECT * FROM transactions WHERE reference = ?
