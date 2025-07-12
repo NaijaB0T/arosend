@@ -138,7 +138,7 @@ export function FilesTab() {
 
   const copyFileLink = async (transferId: string, filename: string) => {
     try {
-      const fileLink = `${window.location.origin}/download/${transferId}`;
+      const fileLink = `${window.location.origin}/file/${transferId}`;
       await navigator.clipboard.writeText(fileLink);
       alert(`Link copied to clipboard for ${filename}`);
     } catch (error) {

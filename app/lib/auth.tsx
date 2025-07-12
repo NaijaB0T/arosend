@@ -41,9 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Try to get user info from the server (which reads the HttpOnly cookie)
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+          
           const response = await fetch(`${AUTH_BASE_URL}/api/userinfo`, {
             credentials: 'include', // Important: include cookies
+            signal: controller.signal,
           });
+          
+          clearTimeout(timeoutId);
           
           if (response.ok) {
             const userData: AuthUser = await response.json();
@@ -51,9 +57,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Also store in localStorage for offline access
             localStorage.setItem("auth_user", JSON.stringify(userData));
             return;
+          } else if (response.status === 401) {
+            // User is not authenticated, clear any stale localStorage data
+            localStorage.removeItem("auth_user");
+            setUser(null);
+            return;
           }
         } catch (fetchError) {
-          console.log("No server auth found, checking localStorage");
+          console.log("No server auth found, checking localStorage:", fetchError);
         }
         
         // Fallback to localStorage if server check fails

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { useBackgroundProgress } from './BackgroundManager';
+import { useNavigate } from 'react-router';
 
 // Enhanced network monitoring and adaptation
 class NetworkAdapter {
@@ -67,29 +68,35 @@ class NetworkAdapter {
     const MB = 1024 * 1024;
     const GB = 1024 * MB;
     
+    // For files smaller than 5MB, use single upload (no chunking) to avoid R2 multipart limits
+    if (fileSize < 5 * MB) {
+      return fileSize; // Return full file size to indicate single upload
+    }
+    
     let baseChunkSize: number;
     if (fileSize < 100 * MB) {
-      baseChunkSize = 3 * MB; // Smaller for better reliability on poor networks
+      baseChunkSize = 5 * MB; // Minimum 5MB for R2 multipart upload compliance
     } else if (fileSize < 1 * GB) {
-      baseChunkSize = 5 * MB; // Reduced from 10MB
+      baseChunkSize = 8 * MB; // Slightly larger for efficiency
     } else if (fileSize < 10 * GB) {
-      baseChunkSize = 10 * MB; // Reduced from 25MB for Nigerian networks
+      baseChunkSize = 15 * MB; // Optimized for large files
     } else {
-      baseChunkSize = 20 * MB; // Reduced from 50MB for very large files
+      baseChunkSize = 25 * MB; // Large chunks for very big files
     }
     
     let speedMultiplier = 1;
     switch (this.connectionQuality) {
-      case 'excellent': speedMultiplier = 2.0; break;
-      case 'good': speedMultiplier = 1.5; break;
+      case 'excellent': speedMultiplier = 1.8; break;
+      case 'good': speedMultiplier = 1.4; break;
       case 'fair': speedMultiplier = 1.0; break;
-      case 'poor': speedMultiplier = 0.6; break; // Slightly increased from 0.5
-      case 'unstable': speedMultiplier = 0.3; break; // Increased from 0.25 for better reliability
+      case 'poor': speedMultiplier = 0.8; break; // Reduced but keeping above 5MB minimum
+      case 'unstable': speedMultiplier = 0.7; break; // Reduced but keeping above 5MB minimum
     }
     
     const adaptiveChunkSize = Math.round(baseChunkSize * speedMultiplier);
-    // Lower minimum for very poor connections, reasonable maximum
-    return Math.max(1 * MB, Math.min(50 * MB, adaptiveChunkSize));
+    // Ensure we never go below 5MB for multipart uploads (R2 requirement)
+    // and never above 50MB for efficiency
+    return Math.max(5 * MB, Math.min(50 * MB, adaptiveChunkSize));
   }
   
   getAdaptiveConcurrency(fileSize: number, totalChunks: number, isDevelopment: boolean): number {
@@ -372,6 +379,7 @@ class MemoryMonitor {
 }
 
 export function TransferForm() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<TransferFormData>({
     files: []
   });
@@ -676,14 +684,17 @@ export function TransferForm() {
       if (completedUploads.length > 0) {
         // Set download URL and completion status
         const baseUrl = window.location.origin;
-        const downloadLink = `${baseUrl}/download/${transferData.transferId}`;
+        const downloadLink = `${baseUrl}/file/${transferData.transferId}`;
         setDownloadUrl(downloadLink);
         setUploadComplete(true);
         setProgress(100);
+        
+        // Auto-redirect to file page after 2 seconds
         setTimeout(() => {
           setBackgroundUploading(false);
           setProgress(0);
-        }, 2000); // Show completion for 2 seconds
+          navigate(`/file/${transferData.transferId}`);
+        }, 2000); // Show completion for 2 seconds then redirect
         clearUploadState();
       }
       
@@ -726,7 +737,8 @@ export function TransferForm() {
       const networkAdapter = NetworkAdapter.getInstance();
       
       const CHUNK_SIZE = await calculateOptimalChunkSize(file.size);
-      const chunks = Math.ceil(file.size / CHUNK_SIZE);
+      const isSingleUpload = CHUNK_SIZE >= file.size; // Single upload if chunk size equals or exceeds file size
+      const chunks = isSingleUpload ? 1 : Math.ceil(file.size / CHUNK_SIZE);
       let CONCURRENT_UPLOADS = await calculateOptimalConcurrency(file.size, chunks);
       const MAX_RETRIES = 3;
       const RETRY_DELAY = 1000; // Base retry delay
@@ -750,8 +762,12 @@ export function TransferForm() {
       
       console.log(`🌐 Network Quality: ${detectedNetworkInfo.quality} (${detectedNetworkInfo.bandwidth.toFixed(1)} Mbps, ${detectedNetworkInfo.latency.toFixed(0)}ms latency)`);
       console.log(`📁 File: ${file.name} (${formatFileSize(file.size)})`);
-      console.log(`🧩 Chunk size: ${formatFileSize(CHUNK_SIZE)} (${chunks} chunks total)`);
-      console.log(`⚡ Concurrency: ${CONCURRENT_UPLOADS} parallel uploads`);
+      if (isSingleUpload) {
+        console.log(`📦 Upload mode: Single upload (file < 5MB, avoiding R2 multipart limits)`);
+      } else {
+        console.log(`🧩 Chunk size: ${formatFileSize(CHUNK_SIZE)} (${chunks} chunks total)`);
+        console.log(`⚡ Concurrency: ${CONCURRENT_UPLOADS} parallel uploads`);
+      }
       console.log(`🎯 Environment: ${isDevelopment ? 'Development' : 'Production'} mode`);
       
       const startPart = (fileInfo.currentPart || 0) + 1;
@@ -759,6 +775,40 @@ export function TransferForm() {
       // Create abort controller for this file
       const abortController = new AbortController();
       abortControllersRef.current.set(fileInfo.id, abortController);
+
+      // Handle single upload for small files (< 5MB)
+      if (isSingleUpload) {
+        console.log('📦 Starting single file upload...');
+        
+        try {
+          // Use simple PUT upload instead of multipart
+          const response = await fetch(`/api/upload-simple/${encodeURIComponent(fileData.key)}`, {
+            method: 'PUT',
+            body: file,
+            signal: abortController.signal,
+            headers: {
+              'Content-Type': file.type || 'application/octet-stream',
+              'Content-Length': file.size.toString()
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+          }
+
+          console.log('✅ Single file upload completed successfully');
+          
+          // Return a single "part" for compatibility with completion logic
+          return [{
+            partNumber: 1,
+            etag: 'single-upload' // Placeholder etag for single uploads
+          }];
+          
+        } catch (error) {
+          console.error('❌ Single upload failed:', error);
+          throw error;
+        }
+      }
 
       // Function to update real-time progress
       const updateRealTimeProgress = () => {

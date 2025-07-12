@@ -5,6 +5,6 @@ export default [
   route("features", "routes/features.tsx"),
   route("pricing", "routes/pricing.tsx"),
   route("help", "routes/help.tsx"),
-  route("download/:transferId", "routes/download.tsx"),
+  route("file/:transferId", "routes/file.$transferId.tsx"),
   route("account", "routes/account.tsx")
 ] satisfies RouteConfig;

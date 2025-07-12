@@ -12,6 +12,7 @@ interface DatabaseFile {
   transfer_id: string;
   user_id: string;
   is_managed: number;
+  upload_status?: string;
   extended_until?: number;
   transfer_status: string;
   transfer_created_at: number;
@@ -23,6 +24,13 @@ interface DatabaseUser {
   credits: number;
   created_at: number;
   updated_at: number;
+}
+
+interface DatabaseTransfer {
+  id: string;
+  status: string;
+  expires_at: number;
+  created_at: number;
 }
 
 interface PaystackInitResponse {
@@ -42,6 +50,12 @@ interface PaystackVerifyResponse {
     status: string;
     amount: number;
     reference: string;
+    metadata?: {
+      type?: string;
+      transfer_id?: string;
+      extension_days?: string;
+      guest_email?: string;
+    };
   };
 }
 
@@ -87,7 +101,8 @@ const CompleteTransferSchema = z.object({
 
 const PaymentInitializeSchema = z.object({
   amount: z.number().int().min(10000), // Minimum ₦100 in kobo
-  email: z.string().email()
+  email: z.string().email(),
+  callback_url: z.string().url().optional()
 });
 
 const PaymentVerifySchema = z.object({
@@ -252,7 +267,7 @@ async function handleOpenAuth(c: any) {
           status: 302,
           headers: {
             'Location': '/?auth=success',
-            'Set-Cookie': `auth_user=${JSON.stringify({id: userId, email: value.email})}; Path=/; HttpOnly; SameSite=Lax`
+            'Set-Cookie': `auth_user=${encodeURIComponent(JSON.stringify({id: userId, email: value.email}))}; Path=/; HttpOnly; SameSite=Lax`
           }
         });
       },
@@ -288,34 +303,47 @@ app.post("/api/logout", async (c) => {
 
 // User info endpoint - reads from cookie
 app.get("/api/userinfo", async (c) => {
-  // Get user data from cookie
-  const authCookie = c.req.header("Cookie");
-  const authUserMatch = authCookie?.match(/auth_user=([^;]+)/);
-  
-  if (!authUserMatch) {
-    return c.json({ error: "No authentication found" }, 401);
-  }
+  console.log("🔍 /api/userinfo endpoint called");
   
   try {
-    const userData = JSON.parse(decodeURIComponent(authUserMatch[1]));
+    // Get user data from cookie
+    const authCookie = c.req.header("Cookie");
+    console.log("📝 Cookie header:", authCookie ? "Present" : "Not present");
     
+    const authUserMatch = authCookie?.match(/auth_user=([^;]+)/);
+    console.log("🔑 Auth user match:", authUserMatch ? "Found" : "Not found");
+    
+    if (!authUserMatch) {
+      console.log("❌ No auth cookie found, returning 401");
+      return c.json({ error: "No authentication found" }, 401);
+    }
+    
+    console.log("🔄 Parsing user data from cookie...");
+    const userData = JSON.parse(decodeURIComponent(authUserMatch[1]));
+    console.log("✅ User data parsed:", { id: userData.id });
+    
+    console.log("💾 Querying database for user...");
     // Get full user data from database
     const user = await c.env.DB.prepare(
-      `SELECT * FROM users WHERE id = ?`
+      `SELECT id, email, credits FROM users WHERE id = ?`
     ).bind(userData.id).first();
+    console.log("📊 Database query result:", user ? "User found" : "User not found");
     
     if (!user) {
+      console.log("❌ User not found in database, returning 404");
       return c.json({ error: "User not found" }, 404);
     }
     
+    console.log("✅ Returning user data");
     return c.json({
       id: user.id,
       email: user.email,
       credits: user.credits
     });
   } catch (error) {
-    console.error("Error parsing auth cookie:", error);
-    return c.json({ error: "Invalid authentication" }, 401);
+    console.error("💥 Error in /api/userinfo:", error);
+    console.error("Stack trace:", error instanceof Error ? error.stack : "No stack trace");
+    return c.json({ error: "Internal server error" }, 500);
   }
 });
 
@@ -590,33 +618,111 @@ app.get("/api/uploads/status/:transferId/:fileId", async (c) => {
   }
 });
 
+// Simple upload for small files (< 5MB) - bypasses multipart upload limitations
+app.put("/api/upload-simple/*", async (c) => {
+  try {
+    // Extract the key from the URL path (everything after /api/upload-simple/)
+    const url = new URL(c.req.url);
+    const key = decodeURIComponent(url.pathname.replace('/api/upload-simple/', ''));
+    console.log('📦 Simple upload for key:', key);
+    
+    // Get the file data from the request body
+    const fileBody = await c.req.arrayBuffer();
+    console.log('📦 File size:', fileBody.byteLength);
+    
+    if (!fileBody || fileBody.byteLength === 0) {
+      return c.json({ error: 'No file data provided' }, 400);
+    }
+    
+    // Upload directly to R2 using simple PUT
+    const object = await c.env.FILE_BUCKET.put(key, fileBody, {
+      httpMetadata: {
+        contentType: c.req.header('content-type') || 'application/octet-stream'
+      }
+    });
+    
+    console.log('✅ Simple upload completed:', object.key);
+    
+    return c.json({ 
+      success: true, 
+      key: object.key,
+      etag: object.etag,
+      version: object.version
+    });
+    
+  } catch (error) {
+    console.error('❌ Simple upload failed:', error);
+    return c.json({ 
+      error: 'Upload failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
 // Complete multipart upload
 app.post("/api/transfers/complete", async (c) => {
   try {
+    console.log('🔄 Completing multipart upload...');
     const body = await c.req.json();
+    console.log('📝 Request body keys:', Object.keys(body));
+    console.log('📝 Parts count:', body.parts?.length || 0);
+    
     const validatedData = CompleteTransferSchema.parse(body);
+    console.log('✅ Validation successful');
     
-    // Complete the multipart upload
-    const multipartUpload = c.env.FILE_BUCKET.resumeMultipartUpload(
-      validatedData.key,
-      validatedData.uploadId
-    );
+    // Check if this is a single upload (indicated by placeholder etag)
+    const isSingleUpload = validatedData.parts.length === 1 && validatedData.parts[0].etag === 'single-upload';
     
-    const object = await multipartUpload.complete(validatedData.parts);
+    let object;
+    if (isSingleUpload) {
+      console.log('📦 Completing single upload for key:', validatedData.key);
+      // For single uploads, we don't need to complete multipart - file is already uploaded
+      // Just verify the object exists in R2
+      object = await c.env.FILE_BUCKET.head(validatedData.key);
+      console.log('✅ Single upload verified successfully');
+    } else {
+      // Complete the multipart upload
+      console.log('📤 Resuming multipart upload for key:', validatedData.key);
+      const multipartUpload = c.env.FILE_BUCKET.resumeMultipartUpload(
+        validatedData.key,
+        validatedData.uploadId
+      );
+      
+      console.log('🔗 Completing upload with parts:', validatedData.parts.length);
+      object = await multipartUpload.complete(validatedData.parts);
+      console.log('✅ Multipart upload completed successfully');
+    }
+    
+    // Update file upload status to completed
+    console.log('💾 Updating file upload status to completed...');
+    const fileResult = await c.env.DB.prepare(`
+      UPDATE files SET upload_status = 'completed' WHERE transfer_id = ? AND r2_object_key = ?
+    `).bind(validatedData.transferId, validatedData.key).run();
+    console.log('✅ File status updated, success:', fileResult.success);
     
     // Update transfer status to complete
-    await c.env.DB.prepare(`
+    console.log('💾 Updating transfer status to complete...');
+    const dbResult = await c.env.DB.prepare(`
       UPDATE transfers SET status = 'complete' WHERE id = ?
     `).bind(validatedData.transferId).run();
+    console.log('✅ Transfer status updated, success:', dbResult.success);
     
     return c.json({ success: true, object });
     
   } catch (error) {
-    console.error('Error completing transfer:', error);
+    console.error('❌ Error completing transfer:', error);
+    console.error('Error type:', error?.constructor?.name);
+    console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+    
     if (error instanceof z.ZodError) {
+      console.error('Validation errors:', error.errors);
       return c.json({ error: 'Invalid request data', details: error.errors }, 400);
     }
-    return c.json({ error: 'Internal server error' }, 500);
+    
+    return c.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
   }
 });
 
@@ -696,6 +802,218 @@ app.get("/api/file/:transferId/:filename", async (c) => {
 });
 
 // File Management API Routes
+
+// Get transfer details (for file page)
+app.get("/api/transfers/:transferId", async (c) => {
+  try {
+    const transferId = c.req.param('transferId');
+    console.log("🔍 /api/transfers/:transferId called with ID:", transferId);
+    
+    // Get transfer details
+    console.log("💾 Querying transfers table...");
+    const transfer = await c.env.DB.prepare(`
+      SELECT * FROM transfers WHERE id = ?
+    `).bind(transferId).first<DatabaseTransfer>();
+    console.log("📊 Transfer query result:", transfer ? "Found" : "Not found");
+    
+    if (!transfer) {
+      console.log("❌ Transfer not found, returning 404");
+      return c.json({ error: 'Transfer not found' }, 404);
+    }
+    
+    // Get files for this transfer
+    console.log("💾 Querying files for transfer...");
+    const files = await c.env.DB.prepare(`
+      SELECT * FROM files WHERE transfer_id = ?
+    `).bind(transferId).all<DatabaseFile>();
+    console.log("📊 Files query result:", files.results?.length || 0, "files found");
+    
+    return c.json({
+      id: transfer.id,
+      status: transfer.status,
+      expires_at: transfer.expires_at,
+      created_at: transfer.created_at,
+      files: files.results?.map(file => ({
+        id: file.id,
+        filename: file.filename,
+        size: file.filesize,
+        upload_status: file.upload_status || 'completed'
+      })) || []
+    });
+    
+  } catch (error) {
+    console.error('Error fetching transfer:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// Extend transfer for guests (payment required)
+app.post("/api/extend-transfer", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { transferId, days, email, amount } = body;
+    
+    if (!transferId || !days || !email || !amount) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+    
+    if (amount < 10000) { // Minimum ₦100 in kobo
+      return c.json({ error: 'Minimum extension cost is ₦100' }, 400);
+    }
+    
+    // Get transfer to verify it exists
+    const transfer = await c.env.DB.prepare(`
+      SELECT * FROM transfers WHERE id = ?
+    `).bind(transferId).first<DatabaseTransfer>();
+    
+    if (!transfer) {
+      return c.json({ error: 'Transfer not found' }, 404);
+    }
+    
+    // Initialize payment with Paystack
+    const paymentData = {
+      email: email,
+      amount: amount,
+      currency: 'NGN',
+      callback_url: `${c.env.BASE_URL}/file/${transferId}?payment=success`,
+      metadata: {
+        type: 'extension',
+        transfer_id: transferId,
+        extension_days: days,
+        guest_email: email
+      }
+    };
+    
+    const paymentResponse = await fetch('https://api.paystack.co/transaction/initialize', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${c.env.PAYSTACK_SECRET_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(paymentData)
+    });
+    
+    if (!paymentResponse.ok) {
+      console.error('Paystack initialization failed:', await paymentResponse.text());
+      return c.json({ error: 'Payment initialization failed' }, 500);
+    }
+    
+    const paymentResult = await paymentResponse.json() as PaystackInitResponse;
+    
+    return c.json({
+      authorization_url: paymentResult.data?.authorization_url || '',
+      reference: paymentResult.data?.reference || ''
+    });
+    
+  } catch (error) {
+    console.error('Error initializing extension payment:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// Extend transfer using credits (for authenticated users)
+app.post("/api/extend-transfer-credits", async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    
+    const userId = authHeader.slice(7);
+    const body = await c.req.json();
+    const { transferId, days } = body;
+    
+    if (!transferId || !days) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+    
+    if (days < 1 || days > 365) {
+      return c.json({ error: 'Invalid extension days' }, 400);
+    }
+    
+    // Get transfer to verify it exists
+    const transfer = await c.env.DB.prepare(`
+      SELECT * FROM transfers WHERE id = ?
+    `).bind(transferId).first<DatabaseTransfer>();
+    
+    if (!transfer) {
+      return c.json({ error: 'Transfer not found' }, 404);
+    }
+    
+    // Get transfer files to calculate total cost
+    const files = await c.env.DB.prepare(`
+      SELECT * FROM files WHERE transfer_id = ?
+    `).bind(transferId).all<DatabaseFile>();
+    
+    if (!files.results || files.results.length === 0) {
+      return c.json({ error: 'No files found for transfer' }, 404);
+    }
+    
+    // Calculate total extension cost
+    const totalSizeBytes = files.results.reduce((sum, file) => sum + (file.filesize as number), 0);
+    const extensionCost = calculateExtensionCost(totalSizeBytes, days);
+    
+    // Check user's credit balance
+    const user = await c.env.DB.prepare(`
+      SELECT credits FROM users WHERE id = ?
+    `).bind(userId).first<Pick<DatabaseUser, 'credits'>>();
+    
+    if (!user || (user.credits as number) < extensionCost) {
+      return c.json({ 
+        error: 'Insufficient credits',
+        required_credits: extensionCost,
+        current_credits: (user?.credits as number) || 0
+      }, 400);
+    }
+    
+    // Calculate new expiry (extend from current expiry or now, whichever is later)
+    const currentExpiry = transfer.expires_at as number;
+    const newExpiry = Math.max(currentExpiry, Date.now()) + (days * 24 * 60 * 60 * 1000);
+    
+    // Start transaction - deduct credits and update transfer
+    const now = Date.now();
+    
+    // Deduct credits from user
+    await c.env.DB.prepare(`
+      UPDATE users SET credits = credits - ?, updated_at = ? WHERE id = ?
+    `).bind(extensionCost, now, userId).run();
+    
+    // Update transfer expiry
+    await c.env.DB.prepare(`
+      UPDATE transfers SET expires_at = ? WHERE id = ?
+    `).bind(newExpiry, transferId).run();
+    
+    // Record extension transaction
+    await c.env.DB.prepare(`
+      INSERT INTO transactions (id, user_id, type, amount, credits, description, reference, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(),
+      userId,
+      'debit',
+      extensionCost * 100, // Convert to kobo for consistency
+      -extensionCost,
+      `Transfer extension - ${transferId} for ${days} day(s)`,
+      `transfer_extension_${crypto.randomUUID()}`,
+      'success',
+      now,
+      now
+    ).run();
+    
+    console.log(`Extended transfer ${transferId} by ${days} days using ${extensionCost} credits`);
+    
+    return c.json({ 
+      success: true,
+      new_expiry: newExpiry,
+      cost_paid: extensionCost,
+      remaining_credits: (user.credits as number) - extensionCost
+    });
+    
+  } catch (error) {
+    console.error('Error extending transfer with credits:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
 
 // Calculate extension cost based on file size and days
 function calculateExtensionCost(fileSizeBytes: number, days: number): number {
@@ -1067,7 +1385,7 @@ app.post("/api/payments/initialize", async (c) => {
         email: validatedData.email,
         amount: validatedData.amount,
         reference: reference,
-        callback_url: `${new URL(c.req.url).origin}/account?payment=success`,
+        callback_url: validatedData.callback_url || `${new URL(c.req.url).origin}/account?payment=success`,
         metadata: {
           userId: userId,
           transactionId: transactionId,
@@ -1129,7 +1447,34 @@ app.post("/api/payments/verify", async (c) => {
     const paystackData: PaystackVerifyResponse = await paystackResponse.json();
     
     if (paystackData.status && paystackData.data?.status === 'success') {
-      // Get transaction
+      // Check if this is an extension payment (guest payment)
+      if (paystackData.data.metadata?.type === 'extension') {
+        const metadata = paystackData.data.metadata;
+        const transferId = metadata.transfer_id || '';
+        const days = parseInt(metadata.extension_days || '1');
+        
+        // Get transfer to extend
+        const transfer = await c.env.DB.prepare(`
+          SELECT * FROM transfers WHERE id = ?
+        `).bind(transferId).first<DatabaseTransfer>();
+        
+        if (transfer) {
+          // Calculate new expiry (extend from current expiry or now, whichever is later)
+          const currentExpiry = transfer.expires_at as number;
+          const newExpiry = Math.max(currentExpiry, Date.now()) + (days * 24 * 60 * 60 * 1000);
+          
+          // Update transfer expiry
+          await c.env.DB.prepare(`
+            UPDATE transfers SET expires_at = ? WHERE id = ?
+          `).bind(newExpiry, transferId).run();
+          
+          console.log(`Extended transfer ${transferId} by ${days} days`);
+        }
+        
+        return c.json({ status: 'success', type: 'extension', transfer_id: transferId });
+      }
+      
+      // Handle regular credit payments
       const transaction = await c.env.DB.prepare(`
         SELECT * FROM transactions WHERE reference = ?
       `).bind(validatedData.reference).first();
