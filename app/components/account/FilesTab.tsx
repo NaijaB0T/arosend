@@ -30,6 +30,8 @@ export function FilesTab() {
   const [extendingFile, setExtendingFile] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [extensionDays, setExtensionDays] = useState<number>(1);
+  const [customDays, setCustomDays] = useState<string>("");
+  const [useCustomDays, setUseCustomDays] = useState<boolean>(false);
   const [extensionHistory, setExtensionHistory] = useState<FileExtension[]>([]);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
 
@@ -92,11 +94,48 @@ export function FilesTab() {
 
   const calculateExtensionCost = (file: ManagedFile, days: number): number => {
     const fileSizeGB = file.filesize / (1024 * 1024 * 1024);
-    return Math.ceil(fileSizeGB * days * 2); // ₦2 per GB per day
+    return fileSizeGB * days * 2; // ₦2 per GB per day
+  };
+
+  const formatCost = (cost: number): string => {
+    if (cost >= 1) {
+      return cost.toFixed(2);
+    }
+    
+    // For values less than 1, find first 2 non-zero digits
+    const costStr = cost.toString();
+    const decimalIndex = costStr.indexOf('.');
+    
+    if (decimalIndex === -1) return cost.toFixed(2);
+    
+    let nonZeroCount = 0;
+    let precision = 0;
+    
+    for (let i = decimalIndex + 1; i < costStr.length; i++) {
+      precision++;
+      if (costStr[i] !== '0') {
+        nonZeroCount++;
+        if (nonZeroCount === 2) break;
+      }
+    }
+    
+    return cost.toFixed(Math.max(2, precision));
+  };
+
+  const copyFileLink = async (transferId: string, filename: string) => {
+    try {
+      const fileLink = `${window.location.origin}/download/${transferId}`;
+      await navigator.clipboard.writeText(fileLink);
+      alert(`Link copied to clipboard for ${filename}`);
+    } catch (error) {
+      console.error("Error copying to clipboard:", error);
+      alert("Failed to copy link to clipboard");
+    }
   };
 
   const handleExtendFile = async (file: ManagedFile) => {
-    if (!extensionDays || extensionDays < 1) return;
+    const daysToExtend = useCustomDays ? parseInt(customDays) : extensionDays;
+    if (!daysToExtend || daysToExtend < 1) return;
     
     try {
       setExtendingFile(file.id);
@@ -112,7 +151,7 @@ export function FilesTab() {
         },
         body: JSON.stringify({
           fileId: file.id,
-          days: extensionDays
+          days: daysToExtend
         }),
       });
 
@@ -124,6 +163,8 @@ export function FilesTab() {
         setShowExtensionModal(false);
         setSelectedFile(null);
         setExtensionDays(1);
+        setCustomDays("");
+        setUseCustomDays(false);
       } else {
         alert(data.error || "Failed to extend file");
       }
@@ -167,6 +208,8 @@ export function FilesTab() {
   const openExtensionModal = (file: ManagedFile) => {
     setSelectedFile(file.id);
     setExtensionDays(1);
+    setCustomDays("");
+    setUseCustomDays(false);
     setShowExtensionModal(true);
   };
 
@@ -216,12 +259,18 @@ export function FilesTab() {
                   
                   {file.total_extension_cost > 0 && (
                     <div className="mt-2 text-sm text-white/60">
-                      Total spent on extensions: {file.total_extension_cost} credits
+                      Total spent on extensions: ₦{formatCost(file.total_extension_cost)}
                     </div>
                   )}
                 </div>
                 
                 <div className="flex flex-col space-y-2 ml-4">
+                  <button
+                    onClick={() => copyFileLink(file.transfer_id, file.filename)}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
+                  >
+                    Copy Link
+                  </button>
                   {!file.is_expired && (
                     <button
                       onClick={() => openExtensionModal(file)}
@@ -241,7 +290,7 @@ export function FilesTab() {
               
               <div className="mt-4 pt-4 border-t border-white/10">
                 <div className="text-sm text-white/70">
-                  <span>Extension cost: ₦{file.extension_cost_per_day}/day</span>
+                  <span>Extension cost: ₦{formatCost(calculateExtensionCost(file, 1))}/day</span>
                   <span className="mx-2">•</span>
                   <span>Upload date: {formatDate(file.created_at)}</span>
                 </div>
@@ -264,28 +313,66 @@ export function FilesTab() {
                 <label className="block text-sm text-white/70 mb-2">
                   Extension Period
                 </label>
-                <select
-                  value={extensionDays}
-                  onChange={(e) => setExtensionDays(parseInt(e.target.value))}
-                  className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-black"
-                >
-                  <option value={1}>1 Day</option>
-                  <option value={3}>3 Days</option>
-                  <option value={7}>1 Week</option>
-                  <option value={14}>2 Weeks</option>
-                  <option value={30}>1 Month</option>
-                  <option value={90}>3 Months</option>
-                  <option value={180}>6 Months</option>
-                  <option value={365}>1 Year</option>
-                </select>
+                <div className="space-y-3">
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        checked={!useCustomDays}
+                        onChange={() => setUseCustomDays(false)}
+                        className="text-blue-600"
+                      />
+                      <span className="text-white text-sm">Preset options</span>
+                    </label>
+                    {!useCustomDays && (
+                      <select
+                        value={extensionDays}
+                        onChange={(e) => setExtensionDays(parseInt(e.target.value))}
+                        className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-black"
+                      >
+                        <option value={1}>1 Day</option>
+                        <option value={3}>3 Days</option>
+                        <option value={7}>1 Week</option>
+                        <option value={14}>2 Weeks</option>
+                        <option value={30}>1 Month</option>
+                        <option value={90}>3 Months</option>
+                        <option value={180}>6 Months</option>
+                        <option value={365}>1 Year</option>
+                      </select>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        checked={useCustomDays}
+                        onChange={() => setUseCustomDays(true)}
+                        className="text-blue-600"
+                      />
+                      <span className="text-white text-sm">Custom days</span>
+                    </label>
+                    {useCustomDays && (
+                      <input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={customDays}
+                        onChange={(e) => setCustomDays(e.target.value)}
+                        placeholder="Enter number of days"
+                        className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50"
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
               
               <div className="bg-white/5 rounded-lg p-4">
                 <div className="text-sm text-white/70 space-y-1">
                   <div>File size: {formatFileSize(selectedFileData.filesize)}</div>
-                  <div>Extension period: {extensionDays} day(s)</div>
+                  <div>Extension period: {useCustomDays ? (parseInt(customDays) || 0) : extensionDays} day(s)</div>
                   <div className="font-medium text-white">
-                    Cost: {calculateExtensionCost(selectedFileData, extensionDays)} credits
+                    Cost: ₦{formatCost(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
                   </div>
                 </div>
               </div>
@@ -295,6 +382,8 @@ export function FilesTab() {
                   onClick={() => {
                     setShowExtensionModal(false);
                     setSelectedFile(null);
+                    setCustomDays("");
+                    setUseCustomDays(false);
                   }}
                   className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
                 >

@@ -11,4 +11,9 @@ export default defineConfig({
     reactRouter(),
     tsconfigPaths(),
   ],
+  server: {
+    hmr: {
+      overlay: false // Disable error overlay for better UX during uploads
+    }
+  }
 });

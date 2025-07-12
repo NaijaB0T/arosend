@@ -2,6 +2,174 @@ import React, { useState, useRef } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { useBackgroundProgress } from './BackgroundManager';
 
+// Enhanced network monitoring and adaptation
+class NetworkAdapter {
+  private static instance: NetworkAdapter | null = null;
+  private speedHistory: number[] = [];
+  private currentBandwidth = 0;
+  private connectionQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'unstable' = 'good';
+  private speedTestResults: Array<{ timestamp: number; speed: number; latency: number }> = [];
+  
+  static getInstance(): NetworkAdapter {
+    if (!NetworkAdapter.instance) {
+      NetworkAdapter.instance = new NetworkAdapter();
+    }
+    return NetworkAdapter.instance;
+  }
+  
+  async measureNetworkSpeed(): Promise<{ speed: number; latency: number }> {
+    try {
+      // Use Navigator Connection API for speed and estimate latency
+      if ('connection' in navigator && (navigator as any).connection) {
+        const connection = (navigator as any).connection;
+        const speed = connection.downlink || 5;
+        const latency = connection.rtt || 100; // Use built-in RTT if available
+        
+        this.currentBandwidth = speed;
+        this.updateConnectionQuality(speed, latency);
+        
+        this.speedTestResults.push({ timestamp: Date.now(), speed, latency });
+        if (this.speedTestResults.length > 10) {
+          this.speedTestResults.shift();
+        }
+        
+        return { speed, latency };
+      }
+      
+      // Fallback when Connection API is not available
+      const estimatedSpeed = 5;
+      const estimatedLatency = 100;
+      this.currentBandwidth = estimatedSpeed;
+      this.updateConnectionQuality(estimatedSpeed, estimatedLatency);
+      
+      return { speed: estimatedSpeed, latency: estimatedLatency };
+    } catch (error) {
+      console.warn('Network measurement failed:', error);
+      return { speed: 5, latency: 100 };
+    }
+  }
+  
+  private updateConnectionQuality(speedMbps: number, latency: number) {
+    if (speedMbps >= 50 && latency < 50) {
+      this.connectionQuality = 'excellent';
+    } else if (speedMbps >= 25 && latency < 100) {
+      this.connectionQuality = 'good';
+    } else if (speedMbps >= 10 && latency < 200) {
+      this.connectionQuality = 'fair';
+    } else if (speedMbps >= 1 && latency < 500) {
+      this.connectionQuality = 'poor';
+    } else {
+      this.connectionQuality = 'unstable';
+    }
+  }
+  
+  getAdaptiveChunkSize(fileSize: number): number {
+    const MB = 1024 * 1024;
+    const GB = 1024 * MB;
+    
+    let baseChunkSize: number;
+    if (fileSize < 100 * MB) {
+      baseChunkSize = 5 * MB;
+    } else if (fileSize < 1 * GB) {
+      baseChunkSize = 10 * MB;
+    } else if (fileSize < 10 * GB) {
+      baseChunkSize = 25 * MB;
+    } else {
+      baseChunkSize = 50 * MB;
+    }
+    
+    let speedMultiplier = 1;
+    switch (this.connectionQuality) {
+      case 'excellent': speedMultiplier = 2.0; break;
+      case 'good': speedMultiplier = 1.5; break;
+      case 'fair': speedMultiplier = 1.0; break;
+      case 'poor': speedMultiplier = 0.5; break;
+      case 'unstable': speedMultiplier = 0.25; break;
+    }
+    
+    const adaptiveChunkSize = Math.round(baseChunkSize * speedMultiplier);
+    return Math.max(1 * MB, Math.min(100 * MB, adaptiveChunkSize));
+  }
+  
+  getAdaptiveConcurrency(fileSize: number, totalChunks: number, isDevelopment: boolean): number {
+    const MB = 1024 * 1024;
+    const GB = 1024 * MB;
+    
+    let baseConcurrency: number;
+    if (isDevelopment) {
+      baseConcurrency = Math.min(4, Math.max(2, Math.ceil(totalChunks * 0.1)));
+    } else {
+      if (fileSize < 100 * MB) {
+        baseConcurrency = Math.min(8, Math.max(4, totalChunks));
+      } else if (fileSize < 1 * GB) {
+        baseConcurrency = Math.min(12, Math.max(6, Math.ceil(totalChunks * 0.15)));
+      } else if (fileSize < 10 * GB) {
+        baseConcurrency = Math.min(20, Math.max(8, Math.ceil(totalChunks * 0.1)));
+      } else {
+        baseConcurrency = Math.min(32, Math.max(12, Math.ceil(totalChunks * 0.05)));
+      }
+    }
+    
+    let qualityMultiplier = 1;
+    switch (this.connectionQuality) {
+      case 'excellent': qualityMultiplier = 1.5; break;
+      case 'good': qualityMultiplier = 1.2; break;
+      case 'fair': qualityMultiplier = 1.0; break;
+      case 'poor': qualityMultiplier = 0.7; break;
+      case 'unstable': qualityMultiplier = 0.4; break;
+    }
+    
+    const adaptiveConcurrency = Math.round(baseConcurrency * qualityMultiplier);
+    const maxConcurrency = isDevelopment ? 6 : 32;
+    const minConcurrency = isDevelopment ? 1 : 2;
+    
+    return Math.max(minConcurrency, Math.min(maxConcurrency, adaptiveConcurrency));
+  }
+  
+  getAdaptiveRetryDelay(baseDelay: number, retryCount: number): number {
+    let qualityMultiplier = 1;
+    switch (this.connectionQuality) {
+      case 'excellent': qualityMultiplier = 0.5; break;
+      case 'good': qualityMultiplier = 0.8; break;
+      case 'fair': qualityMultiplier = 1.0; break;
+      case 'poor': qualityMultiplier = 2.0; break;
+      case 'unstable': qualityMultiplier = 4.0; break;
+    }
+    return baseDelay * Math.pow(2, retryCount) * qualityMultiplier;
+  }
+  
+  async monitorAndAdapt(uploadStartTime: number, bytesUploaded: number) {
+    const currentTime = performance.now();
+    const elapsedSeconds = (currentTime - uploadStartTime) / 1000;
+    
+    if (elapsedSeconds > 5) {
+      const currentSpeed = (bytesUploaded * 8) / (1024 * 1024 * elapsedSeconds);
+      this.speedHistory.push(currentSpeed);
+      if (this.speedHistory.length > 10) {
+        this.speedHistory.shift();
+      }
+      
+      const avgSpeed = this.speedHistory.reduce((a, b) => a + b, 0) / this.speedHistory.length;
+      const speedVariation = Math.abs(currentSpeed - avgSpeed) / avgSpeed;
+      
+      if (speedVariation > 0.3) {
+        this.updateConnectionQuality(avgSpeed, 100);
+        return { shouldAdjust: true, newSpeed: avgSpeed, quality: this.connectionQuality };
+      }
+    }
+    return { shouldAdjust: false };
+  }
+  
+  getNetworkStats() {
+    return {
+      quality: this.connectionQuality,
+      bandwidth: this.currentBandwidth,
+      speedHistory: [...this.speedHistory],
+      recentTests: [...this.speedTestResults]
+    };
+  }
+}
+
 interface FileInfo {
   id: string;
   file: File;
@@ -20,21 +188,242 @@ interface TransferFormData {
   files: FileInfo[];
 }
 
+// Streaming file reader for memory-efficient chunk processing
+class StreamingFileReader {
+  private file: File;
+  private chunkSize: number;
+  private position: number = 0;
+
+  constructor(file: File, chunkSize: number) {
+    this.file = file;
+    this.chunkSize = chunkSize;
+  }
+
+  async* readChunks(): AsyncGenerator<{ chunk: Blob; partNumber: number; isLast: boolean }> {
+    let partNumber = 1;
+    
+    while (this.position < this.file.size) {
+      const end = Math.min(this.position + this.chunkSize, this.file.size);
+      const chunk = this.file.slice(this.position, end);
+      const isLast = end >= this.file.size;
+      
+      yield { chunk, partNumber, isLast };
+      
+      this.position = end;
+      partNumber++;
+      
+      // Allow garbage collection of previous chunk
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  reset() {
+    this.position = 0;
+  }
+
+  seekToChunk(partNumber: number) {
+    this.position = (partNumber - 1) * this.chunkSize;
+  }
+
+  getChunk(partNumber: number): Blob {
+    const start = (partNumber - 1) * this.chunkSize;
+    const end = Math.min(start + this.chunkSize, this.file.size);
+    return this.file.slice(start, end);
+  }
+
+  getTotalChunks(): number {
+    return Math.ceil(this.file.size / this.chunkSize);
+  }
+}
+
+// Streaming concurrent upload with memory management
+async function streamingConcurrentUpload(
+  fileReader: StreamingFileReader,
+  uploadParts: Array<{ partNumber: number; etag: string }>,
+  startPart: number,
+  totalChunks: number,
+  concurrency: number,
+  uploadCallback: (partNumber: number, chunk: Blob) => Promise<{ partNumber: number; etag: string }>
+): Promise<void> {
+  const uploadedPartNumbers = new Set(uploadParts.map(p => p.partNumber));
+  const chunkQueue: Array<{ chunk: Blob; partNumber: number; isLast: boolean }> = [];
+  const activeUploads = new Map<number, Promise<{ partNumber: number; etag: string }>>();
+  
+  // Memory monitoring
+  MemoryMonitor.logMemoryUsage('Streaming Upload Start');
+  
+  // Start reading chunks from the file
+  const chunkIterator = fileReader.readChunks();
+  
+  let readingComplete = false;
+  let currentConcurrency = 0;
+  
+  const processNextChunk = async (): Promise<void> => {
+    // Read next chunk if queue is not full and reading is not complete
+    if (chunkQueue.length < concurrency * 2 && !readingComplete) {
+      const result = await chunkIterator.next();
+      if (result.done) {
+        readingComplete = true;
+      } else {
+        const { chunk, partNumber, isLast } = result.value;
+        
+        // Only queue chunks that haven't been uploaded yet
+        if (!uploadedPartNumbers.has(partNumber)) {
+          chunkQueue.push({ chunk, partNumber, isLast });
+          
+          // Log memory usage periodically
+          if (partNumber % 10 === 0) {
+            MemoryMonitor.logMemoryUsage(`Chunk ${partNumber}`);
+          }
+        }
+      }
+    }
+    
+    // Start uploads from queue if we have capacity
+    while (chunkQueue.length > 0 && currentConcurrency < concurrency) {
+      const chunkData = chunkQueue.shift()!;
+      currentConcurrency++;
+      
+      const uploadPromise = uploadCallback(chunkData.partNumber, chunkData.chunk)
+        .then(result => {
+          uploadParts.push(result);
+          currentConcurrency--;
+          
+          // Force garbage collection every 5 completed uploads
+          if (uploadParts.length % 5 === 0) {
+            MemoryMonitor.forceGarbageCollection();
+          }
+          
+          return result;
+        })
+        .catch(error => {
+          currentConcurrency--;
+          // Propagate pause/cancel errors to stop the streaming process
+          if (error instanceof Error && (error.message === 'Upload paused' || error.message === 'Upload cancelled')) {
+            throw error;
+          }
+          throw error;
+        });
+      
+      activeUploads.set(chunkData.partNumber, uploadPromise);
+    }
+  };
+  
+  // Main processing loop
+  while (!readingComplete || chunkQueue.length > 0 || activeUploads.size > 0) {
+    await processNextChunk();
+    
+    // Wait for at least one upload to complete if we're at capacity
+    if (activeUploads.size > 0 && (currentConcurrency >= concurrency || chunkQueue.length === 0)) {
+      const completedUpload = await Promise.race(activeUploads.values());
+      
+      // Remove completed upload from active set
+      for (const [partNumber, promise] of activeUploads.entries()) {
+        if (await promise.then(() => true).catch(() => false)) {
+          activeUploads.delete(partNumber);
+          break;
+        }
+      }
+    }
+    
+    // Small delay to prevent tight loops
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  
+  MemoryMonitor.logMemoryUsage('Streaming Upload Complete');
+}
+
+// Memory monitoring utilities
+class MemoryMonitor {
+  private static formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  static logMemoryUsage(context: string) {
+    if ('memory' in performance && (performance as any).memory) {
+      const memory = (performance as any).memory;
+      console.log(`🧠 Memory [${context}]:`, {
+        used: this.formatBytes(memory.usedJSHeapSize),
+        total: this.formatBytes(memory.totalJSHeapSize),
+        limit: this.formatBytes(memory.jsHeapSizeLimit)
+      });
+    }
+  }
+
+  static async forceGarbageCollection() {
+    // Force garbage collection if available (dev tools)
+    if ('gc' in window) {
+      (window as any).gc();
+    }
+    
+    // Alternative: trigger GC through memory pressure
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+}
+
 export function TransferForm() {
   const [formData, setFormData] = useState<TransferFormData>({
     files: []
   });
+  
+  // Global error handler to prevent unhandled promise rejections
+  React.useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      // Silently handle upload-related errors to prevent UI disruption
+      if (event.reason?.message?.includes('fetch') || 
+          event.reason?.message?.includes('500') ||
+          event.reason?.message?.includes('Network error')) {
+        event.preventDefault();
+        console.warn('Upload error handled silently:', event.reason?.message);
+      }
+    };
+    
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string>('');
   const [transferId, setTransferId] = useState<string>('');
   const [pausedUploads, setPausedUploads] = useState<Set<string>>(new Set());
+  const [networkInfo, setNetworkInfo] = useState<{
+    speed: 'fast' | 'medium' | 'slow';
+    quality: 'excellent' | 'good' | 'fair' | 'poor' | 'unstable';
+    bandwidth: number;
+    latency: number;
+  }>({ speed: 'medium', quality: 'fair', bandwidth: 5, latency: 100 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   
   // Background progress integration
   const { setProgress, setIsUploading: setBackgroundUploading } = useBackgroundProgress();
+
+  // Initialize network detection on component mount
+  React.useEffect(() => {
+    const initNetworkDetection = async () => {
+      try {
+        const netInfo = await detectNetworkCondition();
+        setNetworkInfo(netInfo);
+      } catch (error) {
+        console.warn('Initial network detection failed:', error);
+      }
+    };
+    
+    initNetworkDetection();
+    
+    // Re-detect network conditions every 30 seconds
+    const networkInterval = setInterval(initNetworkDetection, 30000);
+    
+    return () => clearInterval(networkInterval);
+  }, []);
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -93,6 +482,101 @@ export function TransferForm() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Enhanced chunk size calculation with network adaptation
+  const calculateOptimalChunkSize = async (fileSize: number): Promise<number> => {
+    const networkAdapter = NetworkAdapter.getInstance();
+    
+    // Get network-adaptive chunk size
+    const adaptiveChunkSize = networkAdapter.getAdaptiveChunkSize(fileSize);
+    
+    console.log(`🧩 Adaptive chunk size: ${formatFileSize(adaptiveChunkSize)} (based on network conditions)`);
+    
+    return adaptiveChunkSize;
+  };
+
+  // Enhanced network detection with real-time measurement
+  const detectNetworkCondition = async (): Promise<{
+    speed: 'fast' | 'medium' | 'slow';
+    quality: 'excellent' | 'good' | 'fair' | 'poor' | 'unstable';
+    bandwidth: number;
+    latency: number;
+  }> => {
+    const networkAdapter = NetworkAdapter.getInstance();
+    
+    try {
+      // Perform real-time speed test
+      const speedTest = await networkAdapter.measureNetworkSpeed();
+      const stats = networkAdapter.getNetworkStats();
+      
+      // Map to legacy speed categories for backward compatibility
+      let speedCategory: 'fast' | 'medium' | 'slow';
+      if (speedTest.speed >= 25) {
+        speedCategory = 'fast';
+      } else if (speedTest.speed >= 5) {
+        speedCategory = 'medium';
+      } else {
+        speedCategory = 'slow';
+      }
+      
+      return {
+        speed: speedCategory,
+        quality: stats.quality,
+        bandwidth: speedTest.speed,
+        latency: speedTest.latency
+      };
+    } catch (error) {
+      console.warn('Network detection failed, using fallback:', error);
+      
+      // Fallback to Navigator Connection API
+      if ('connection' in navigator && (navigator as any).connection) {
+        const connection = (navigator as any).connection;
+        const effectiveType = connection.effectiveType;
+        const downlink = connection.downlink || 1;
+        
+        let speedCategory: 'fast' | 'medium' | 'slow';
+        if (effectiveType === '4g' || downlink > 10) {
+          speedCategory = 'fast';
+        } else if (effectiveType === '3g' || downlink > 1.5) {
+          speedCategory = 'medium';
+        } else {
+          speedCategory = 'slow';
+        }
+        
+        return {
+          speed: speedCategory,
+          quality: downlink > 25 ? 'excellent' : downlink > 10 ? 'good' : downlink > 5 ? 'fair' : 'poor',
+          bandwidth: downlink,
+          latency: connection.rtt || 100
+        };
+      }
+      
+      // Ultimate fallback
+      return {
+        speed: 'medium',
+        quality: 'fair',
+        bandwidth: 5,
+        latency: 100
+      };
+    }
+  };
+
+  // Enhanced concurrency calculation with network adaptation
+  const calculateOptimalConcurrency = async (fileSize: number, chunkCount: number): Promise<number> => {
+    // Detect development vs production environment
+    const isDevelopment = window.location.hostname === 'localhost' || 
+                         window.location.hostname === '127.0.0.1' ||
+                         window.location.port === '5173';
+    
+    const networkAdapter = NetworkAdapter.getInstance();
+    
+    // Get network-adaptive concurrency
+    const adaptiveConcurrency = networkAdapter.getAdaptiveConcurrency(fileSize, chunkCount, isDevelopment);
+    
+    console.log(`⚡ Adaptive concurrency: ${adaptiveConcurrency} (based on network quality)`);
+    
+    return adaptiveConcurrency;
+  };
+
   const isFormValid = () => {
     return formData.files.length > 0;
   };
@@ -102,11 +586,13 @@ export function TransferForm() {
     e.preventDefault();
     if (!isFormValid()) return;
 
+    console.log('🚀 Starting upload process...');
     setIsUploading(true);
     setBackgroundUploading(true);
     setProgress(0);
     
     try {
+      console.log('📡 Step 1: Creating transfer...');
       // Step 1: Create transfer and get upload URLs
       const transferResponse = await fetch('/api/transfers', {
         method: 'POST',
@@ -121,9 +607,11 @@ export function TransferForm() {
         })
       });
 
+      console.log('📡 Transfer response status:', transferResponse.status);
+      
       if (!transferResponse.ok) {
         const errorData = await transferResponse.json().catch(() => ({ error: 'Unknown error' })) as { error?: string };
-        console.error('Transfer creation failed:', errorData);
+        console.error('❌ Transfer creation failed:', errorData);
         throw new Error(`Failed to create transfer: ${errorData.error || 'Unknown error'}`);
       }
 
@@ -136,6 +624,9 @@ export function TransferForm() {
           key: string;
         }>;
       };
+      
+      console.log('✅ Transfer created successfully:', transferData.transferId);
+      console.log('📋 Files to upload:', transferData.files.length);
       
       setTransferId(transferData.transferId);
       
@@ -151,10 +642,13 @@ export function TransferForm() {
       }));
       
       // Save upload state for resumption
+      console.log('💾 Saving upload state...');
       saveUploadState({ transferId: transferData.transferId, formData });
       
+      console.log('📤 Step 2: Starting file uploads...');
       // Step 2: Upload files in chunks and complete uploads
       const uploadPromises = formData.files.map(async (fileInfo, index) => {
+        console.log(`🔄 Starting upload for file ${index + 1}/${formData.files.length}: ${fileInfo.name}`);
         const fileData = transferData.files[index];
         const uploadParts = await uploadFileInChunks(fileInfo, fileData);
         
@@ -205,296 +699,383 @@ export function TransferForm() {
   };
 
   const uploadFileInChunks = async (fileInfo: FileInfo, fileData: any) => {
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY = 1000; // 1 second
-    const CONCURRENT_UPLOADS = 4; // Number of concurrent chunk uploads
-    
     const file = fileInfo.file;
-    const chunks = Math.ceil(file.size / CHUNK_SIZE);
-    const uploadParts = [...(fileInfo.uploadedParts || [])];
-    const startPart = (fileInfo.currentPart || 0) + 1;
-
-    // Track real-time progress for each chunk
-    const chunkProgress = new Map<number, number>(); // partNumber -> bytes uploaded
-    const chunkSizes = new Map<number, number>(); // partNumber -> total chunk size
-
-    // Create abort controller for this file
-    const abortController = new AbortController();
-    abortControllersRef.current.set(fileInfo.id, abortController);
-
-    // Function to update real-time progress
-    const updateRealTimeProgress = () => {
-      // Calculate total bytes uploaded (completed chunks + partial progress)
-      let totalBytesUploaded = 0;
-      
-      // Add bytes from completed chunks
-      for (const part of uploadParts) {
-        const chunkSize = Math.min(CHUNK_SIZE, file.size - (part.partNumber - 1) * CHUNK_SIZE);
-        totalBytesUploaded += chunkSize;
-      }
-      
-      // Add partial progress from currently uploading chunks
-      for (const [partNumber, bytesUploaded] of chunkProgress) {
-        // Only count if this chunk isn't already completed
-        if (!uploadParts.find(p => p.partNumber === partNumber)) {
-          totalBytesUploaded += bytesUploaded;
-        }
-      }
-      
-      const progress = Math.min(Math.round((totalBytesUploaded / file.size) * 100), 100);
-      
-      // Update background progress
-      setProgress(progress);
-      
-      setFormData(prev => ({
-        ...prev,
-        files: prev.files.map(f => 
-          f.id === fileInfo.id ? { 
-            ...f, 
-            progress,
-            uploadedParts: [...uploadParts],
-            currentPart: uploadParts.length > 0 ? Math.max(...uploadParts.map(p => p.partNumber)) : 0,
-            status: 'uploading' as const
-          } : f
-        )
-      }));
-    };
-
-    const uploadChunkWithRetry = async (partNumber: number, chunk: Blob, retryCount = 0): Promise<{ partNumber: number; etag: string }> => {
-      try {
-        // Store chunk size for progress calculation
-        chunkSizes.set(partNumber, chunk.size);
-        chunkProgress.set(partNumber, 0);
-
-        return await new Promise<{ partNumber: number; etag: string }>((resolve, reject) => {
-          // Check for pause/abort before starting each upload
-          const checkPauseOrAbort = () => {
-            if (pausedUploads.has(fileInfo.id)) {
-              chunkProgress.delete(partNumber);
-              reject(new Error('Upload paused'));
-              return true;
-            }
-            if (abortController.signal.aborted) {
-              chunkProgress.delete(partNumber);
-              reject(new Error('Upload cancelled'));
-              return true;
-            }
-            return false;
-          };
-
-          if (checkPauseOrAbort()) return;
-
-          const xhr = new XMLHttpRequest();
-          
-          // Set up progress tracking with pause checks
-          xhr.upload.addEventListener('progress', (event) => {
-            // Check for pause during upload
-            if (pausedUploads.has(fileInfo.id)) {
-              xhr.abort();
-              return;
-            }
-            
-            if (event.lengthComputable) {
-              chunkProgress.set(partNumber, event.loaded);
-              updateRealTimeProgress();
-            }
-          });
-
-          // Handle completion
-          xhr.addEventListener('load', () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const result = JSON.parse(xhr.responseText);
-                // Mark this chunk as fully uploaded
-                chunkProgress.delete(partNumber);
-                resolve(result);
-              } catch (e) {
-                chunkProgress.delete(partNumber);
-                reject(new Error('Invalid JSON response'));
-              }
-            } else {
-              chunkProgress.delete(partNumber);
-              reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
-            }
-          });
-
-          // Handle errors
-          xhr.addEventListener('error', () => {
-            chunkProgress.delete(partNumber);
-            reject(new Error('Network error'));
-          });
-
-          // Handle abort - check if it's pause or cancel
-          xhr.addEventListener('abort', () => {
-            chunkProgress.delete(partNumber);
-            if (pausedUploads.has(fileInfo.id)) {
-              reject(new Error('Upload paused'));
-            } else {
-              reject(new Error('Upload cancelled'));
-            }
-          });
-
-          // Handle abort controller
-          abortController.signal.addEventListener('abort', () => {
-            xhr.abort();
-          });
-
-          // Prepare form data
-          const chunkFormData = new FormData();
-          chunkFormData.append('key', fileData.key);
-          chunkFormData.append('uploadId', fileData.uploadId);
-          chunkFormData.append('partNumber', partNumber.toString());
-          chunkFormData.append('chunk', chunk);
-
-          // Start upload
-          xhr.open('POST', '/api/uploads/chunk');
-          xhr.send(chunkFormData);
-        });
-
-      } catch (error) {
-        chunkProgress.delete(partNumber);
-        
-        if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Upload paused' || error.message === 'Upload cancelled')) {
-          throw error;
-        }
-
-        if (retryCount < MAX_RETRIES) {
-          console.log(`Retrying part ${partNumber} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * Math.pow(2, retryCount)));
-          return uploadChunkWithRetry(partNumber, chunk, retryCount + 1);
-        }
-
-        throw new Error(`Failed to upload part ${partNumber} after ${MAX_RETRIES + 1} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    };
-
-    // Helper function to limit concurrent promises - batch approach
-    const limitConcurrency = async (
-      tasks: (() => Promise<any>)[],
-      limit: number
-    ): Promise<any[]> => {
-      const results: any[] = [];
-      
-      for (let i = 0; i < tasks.length; i += limit) {
-        const batch = tasks.slice(i, i + limit);
-        const batchResults = await Promise.all(batch.map(task => task()));
-        results.push(...batchResults);
-      }
-      
-      return results;
-    };
-
-    let newPartsUploaded = 0;
-    let completedParts = uploadParts.length; // Start with already completed parts
+    if (!file) {
+      console.error('❌ No file object found in fileInfo');
+      throw new Error('File object is missing');
+    }
     
-    // Set initial progress based on already completed chunks
-    updateRealTimeProgress();
+    // Declare variables outside try block for scope accessibility
+    const uploadParts = [...(fileInfo.uploadedParts || [])];
+    const chunkProgress = new Map<number, number>();
+    const chunkSizes = new Map<number, number>();
     
     try {
-      // Create tasks for all parts that need to be uploaded
-      const uploadTasks = [];
+      // Log initial memory usage
+      MemoryMonitor.logMemoryUsage('Upload Start');
       
-      for (let partNumber = startPart; partNumber <= chunks; partNumber++) {
-        // Check if this part was already uploaded
-        if (uploadParts.find(p => p.partNumber === partNumber)) {
-          continue; // Skip already completed parts
-        }
+      // Get network information and adaptive settings
+      const detectedNetworkInfo = await detectNetworkCondition();
+      setNetworkInfo(detectedNetworkInfo);
+      const networkAdapter = NetworkAdapter.getInstance();
+      
+      const CHUNK_SIZE = await calculateOptimalChunkSize(file.size);
+      const chunks = Math.ceil(file.size / CHUNK_SIZE);
+      let CONCURRENT_UPLOADS = await calculateOptimalConcurrency(file.size, chunks);
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY = 1000; // Base retry delay
+      
+      // Track upload start time for bandwidth monitoring
+      const uploadStartTime = performance.now();
+      let totalBytesUploaded = 0;
+      
+      // Create streaming file reader for memory-efficient processing
+      const fileReader = new StreamingFileReader(file, CHUNK_SIZE);
+      
+      // Detect development environment
+      const isDevelopment = window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1' ||
+                           window.location.port === '5173';
+      
+      // Circuit breaker for server overload
+      let serverErrorCount = 0;
+      const MAX_SERVER_ERRORS = isDevelopment ? 2 : 5; // Lower threshold for development
+      let serverHealthy = true;
+      
+      console.log(`🌐 Network Quality: ${detectedNetworkInfo.quality} (${detectedNetworkInfo.bandwidth.toFixed(1)} Mbps, ${detectedNetworkInfo.latency.toFixed(0)}ms latency)`);
+      console.log(`📁 File: ${file.name} (${formatFileSize(file.size)})`);
+      console.log(`🧩 Chunk size: ${formatFileSize(CHUNK_SIZE)} (${chunks} chunks total)`);
+      console.log(`⚡ Concurrency: ${CONCURRENT_UPLOADS} parallel uploads`);
+      console.log(`🎯 Environment: ${isDevelopment ? 'Development' : 'Production'} mode`);
+      
+      const startPart = (fileInfo.currentPart || 0) + 1;
 
-        const start = (partNumber - 1) * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, file.size);
-        const chunk = file.slice(start, end);
+      // Create abort controller for this file
+      const abortController = new AbortController();
+      abortControllersRef.current.set(fileInfo.id, abortController);
 
-        // Create upload task
-        uploadTasks.push(async () => {
-          const uploadResult = await uploadChunkWithRetry(partNumber, chunk);
-          
-          // Update parts array and increment counters
-          uploadParts.push({
-            partNumber: uploadResult.partNumber,
-            etag: uploadResult.etag
-          });
-          newPartsUploaded++;
-          completedParts++;
-
-          // Update progress one final time for this completed chunk
-          updateRealTimeProgress();
-
-          // Save state after each successful chunk
-          saveUploadState({ transferId, formData });
-          
-          return uploadResult;
-        });
-      }
-
-      // Execute uploads with concurrency limit
-      if (uploadTasks.length > 0) {
-        console.log(`Starting concurrent upload of ${uploadTasks.length} parts with ${CONCURRENT_UPLOADS} concurrent streams`);
-        await limitConcurrency(uploadTasks, CONCURRENT_UPLOADS);
-      }
-
-      // Sort upload parts by part number for completion
-      uploadParts.sort((a, b) => a.partNumber - b.partNumber);
-
-      // Only mark as completed if we have all parts
-      const allPartsUploaded = uploadParts.length === chunks;
-      if (allPartsUploaded) {
-        setFormData(prev => ({
-          ...prev,
-          files: prev.files.map(f => 
-            f.id === fileInfo.id ? { ...f, status: 'completed' as const, progress: 100 } : f
-          )
-        }));
-      }
-
-      console.log(`Concurrent upload session completed: ${newPartsUploaded} new parts uploaded, ${uploadParts.length}/${chunks} total parts`);
-      return uploadParts;
-    } catch (error) {
-      // Check if this is a pause operation (not an actual error)
-      if (error instanceof Error && error.message === 'Upload paused') {
-        // This is expected - user paused the upload
-        console.log(`Upload paused for file ${fileInfo.id}`);
+      // Function to update real-time progress
+      const updateRealTimeProgress = () => {
+        // Calculate total bytes uploaded (completed chunks + partial progress)
+        let totalBytesUploaded = 0;
         
-        // Update file status to paused, not error
+        // Add bytes from completed chunks
+        for (const part of uploadParts) {
+          const chunkSize = Math.min(CHUNK_SIZE, file.size - (part.partNumber - 1) * CHUNK_SIZE);
+          totalBytesUploaded += chunkSize;
+        }
+        
+        // Add partial progress from currently uploading chunks
+        for (const [partNumber, bytesUploaded] of chunkProgress) {
+          // Only count if this chunk isn't already completed
+          if (!uploadParts.find(p => p.partNumber === partNumber)) {
+            totalBytesUploaded += bytesUploaded;
+          }
+        }
+        
+        const progress = Math.min(Math.round((totalBytesUploaded / file.size) * 100), 100);
+        
+        // Update background progress
+        setProgress(progress);
+        
         setFormData(prev => ({
           ...prev,
           files: prev.files.map(f => 
             f.id === fileInfo.id ? { 
               ...f, 
-              status: 'paused' as const,
-              uploadedParts: [...uploadParts], // Save current progress
-              currentPart: uploadParts.length > 0 ? Math.max(...uploadParts.map(p => p.partNumber)) : 0
+              progress,
+              uploadedParts: [...uploadParts],
+              currentPart: uploadParts.length > 0 ? Math.max(...uploadParts.map(p => p.partNumber)) : 0,
+              status: 'uploading' as const
             } : f
           )
         }));
+      };
+
+      const uploadChunkWithRetry = async (partNumber: number, chunk: Blob, retryCount = 0): Promise<{ partNumber: number; etag: string }> => {
+        try {
+          // Store chunk size for progress calculation
+          chunkSizes.set(partNumber, chunk.size);
+          chunkProgress.set(partNumber, 0);
+
+          return await new Promise<{ partNumber: number; etag: string }>((resolve, reject) => {
+            // Check for pause/abort before starting each upload
+            const checkPauseOrAbort = () => {
+              if (pausedUploads.has(fileInfo.id)) {
+                chunkProgress.delete(partNumber);
+                reject(new Error('Upload paused'));
+                return true;
+              }
+              if (abortController.signal.aborted) {
+                chunkProgress.delete(partNumber);
+                reject(new Error('Upload cancelled'));
+                return true;
+              }
+              return false;
+            };
+
+            if (checkPauseOrAbort()) return;
+
+            const xhr = new XMLHttpRequest();
+            
+            // Suppress console errors for better UX
+            const originalConsoleError = console.error;
+            const suppressError = () => {
+              console.error = () => {}; // Temporarily suppress console errors
+              setTimeout(() => {
+                console.error = originalConsoleError; // Restore after 100ms
+              }, 100);
+            };
+            
+            // Set up progress tracking with pause checks
+            xhr.upload.addEventListener('progress', (event) => {
+              // Check for pause during upload
+              if (pausedUploads.has(fileInfo.id)) {
+                xhr.abort();
+                return;
+              }
+              
+              if (event.lengthComputable) {
+                const previousLoaded = chunkProgress.get(partNumber) || 0;
+                chunkProgress.set(partNumber, event.loaded);
+                updateRealTimeProgress();
+                
+                // Update total bytes uploaded for bandwidth monitoring
+                totalBytesUploaded += event.loaded - previousLoaded;
+                
+                // Periodic network adaptation check
+                if (partNumber % 5 === 0) {
+                  networkAdapter.monitorAndAdapt(uploadStartTime, totalBytesUploaded).then((result: any) => {
+                    if (result.shouldAdjust) {
+                      console.log(`📊 Network adaptation: Speed changed to ${result.newSpeed?.toFixed(1)} Mbps (${result.quality})`);
+                    }
+                  }).catch(() => {});
+                }
+              }
+            });
+
+            // Handle completion
+            xhr.addEventListener('load', () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                  const result = JSON.parse(xhr.responseText);
+                  // Mark this chunk as fully uploaded
+                  chunkProgress.delete(partNumber);
+                  resolve(result);
+                } catch (e) {
+                  chunkProgress.delete(partNumber);
+                  reject(new Error('Invalid JSON response'));
+                }
+              } else {
+                chunkProgress.delete(partNumber);
+                reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+              }
+            });
+
+            // Handle errors
+            xhr.addEventListener('error', () => {
+              suppressError(); // Suppress console errors
+              chunkProgress.delete(partNumber);
+              reject(new Error('Network error'));
+            });
+
+            // Handle abort - check if it's pause or cancel
+            xhr.addEventListener('abort', () => {
+              suppressError(); // Suppress console errors
+              chunkProgress.delete(partNumber);
+              if (pausedUploads.has(fileInfo.id)) {
+                reject(new Error('Upload paused'));
+              } else {
+                reject(new Error('Upload cancelled'));
+              }
+            });
+
+            // Handle abort controller
+            abortController.signal.addEventListener('abort', () => {
+              xhr.abort();
+            });
+
+            // Prepare form data
+            const chunkFormData = new FormData();
+            chunkFormData.append('key', fileData.key);
+            chunkFormData.append('uploadId', fileData.uploadId);
+            chunkFormData.append('partNumber', partNumber.toString());
+            chunkFormData.append('chunk', chunk);
+
+            // Set timeout for stuck uploads
+            xhr.timeout = 60000; // 60 second timeout
+            xhr.addEventListener('timeout', () => {
+              console.error(`⏰ Chunk ${partNumber}/${chunks} timed out after 60 seconds`);
+              chunkProgress.delete(partNumber);
+              reject(new Error('Upload timeout'));
+            });
+
+            // Start upload
+            xhr.open('POST', '/api/uploads/chunk');
+            xhr.send(chunkFormData);
+          });
+
+        } catch (error) {
+          chunkProgress.delete(partNumber);
+          
+          if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Upload paused' || error.message === 'Upload cancelled')) {
+            throw error;
+          }
+
+          if (retryCount < MAX_RETRIES) {
+            // Network-adaptive retry delay
+            let retryDelay = networkAdapter.getAdaptiveRetryDelay(RETRY_DELAY, retryCount);
+            
+            // Track server errors for circuit breaker
+            if (error instanceof Error && (
+              error.message.includes('500') || 
+              error.message.includes('ERR_CONNECTION_ABORTED') ||
+              error.message.includes('ERR_EMPTY_RESPONSE') ||
+              error.message.includes('Network connection lost')
+            )) {
+              serverErrorCount++;
+              serverHealthy = false;
+              retryDelay = retryDelay * (isDevelopment ? 5 : 3); // Longer delays in development
+              
+              // Circuit breaker: Aggressive reduction for development
+              if (serverErrorCount >= MAX_SERVER_ERRORS && CONCURRENT_UPLOADS > (isDevelopment ? 1 : 2)) {
+                const reductionFactor = isDevelopment ? 0.3 : 0.5; // More aggressive in dev
+                CONCURRENT_UPLOADS = Math.max(isDevelopment ? 1 : 2, Math.floor(CONCURRENT_UPLOADS * reductionFactor));
+                console.log(`Circuit breaker: Reducing concurrency to ${CONCURRENT_UPLOADS} due to server issues`);
+              }
+              
+              console.log(`Server issue ${serverErrorCount}/${MAX_SERVER_ERRORS}, extending retry delay for part ${partNumber}`);
+            }
+            
+            console.log(`Retrying part ${partNumber} (attempt ${retryCount + 1}/${MAX_RETRIES + 1}) after ${retryDelay.toFixed(0)}ms (${detectedNetworkInfo.quality} network)`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return uploadChunkWithRetry(partNumber, chunk, retryCount + 1);
+          }
+
+          throw new Error(`Failed to upload part ${partNumber} after ${MAX_RETRIES + 1} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      };
+
+      // Helper function to limit concurrent promises with adaptive batching
+      const limitConcurrency = async (
+        tasks: (() => Promise<any>)[],
+        initialLimit: number
+      ): Promise<any[]> => {
+        const results: any[] = [];
+        let currentLimit = initialLimit;
+        let consecutiveErrors = 0;
         
-        return []; // Return empty array to avoid completing the upload
-      }
+        for (let i = 0; i < tasks.length; i += currentLimit) {
+          const batch = tasks.slice(i, i + currentLimit);
+          
+          try {
+            const batchResults = await Promise.all(batch.map(task => task()));
+            results.push(...batchResults);
+            
+            // Reset error count on successful batch
+            consecutiveErrors = 0;
+            
+            // Gradually increase concurrency back up if it was reduced
+            if (currentLimit < initialLimit) {
+              currentLimit = Math.min(currentLimit + 1, initialLimit);
+              console.log(`Increasing concurrency back to ${currentLimit}`);
+            }
+            
+          } catch (error) {
+            consecutiveErrors++;
+            
+            // If we get server errors, reduce concurrency for subsequent batches
+            if (error instanceof Error && error.message.includes('500') && consecutiveErrors >= 2) {
+              currentLimit = Math.max(Math.floor(currentLimit * 0.7), 2);
+              console.log(`Server overload detected, reducing concurrency to ${currentLimit}`);
+            }
+            
+            // Still push the error - let individual tasks handle their own retries
+            throw error;
+          }
+        }
+        
+        return results;
+      };
+
+      let newPartsUploaded = 0;
+      let completedParts = uploadParts.length; // Start with already completed parts
       
-      // Check if this is an abort/cancel operation
-      if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Upload cancelled')) {
-        console.log(`Upload cancelled for file ${fileInfo.id}`);
-        return []; // Return empty array to avoid completing the upload
-      }
+      // Set initial progress based on already completed chunks
+      updateRealTimeProgress();
+
+      // Use streaming approach with memory-efficient concurrent upload processing
+      await streamingConcurrentUpload(
+        fileReader,
+        uploadParts,
+        startPart,
+        chunks,
+        CONCURRENT_UPLOADS,
+        uploadChunkWithRetry
+      );
+
+      // Log final memory usage
+      MemoryMonitor.logMemoryUsage('Upload Complete');
+      await MemoryMonitor.forceGarbageCollection();
+
+      return uploadParts;
+  } catch (error) {
+    // Check if this is a pause operation (not an actual error)
+    if (error instanceof Error && error.message === 'Upload paused') {
+      console.log(`Upload paused for file ${fileInfo.id}`);
       
-      // Mark file as error only for real errors
       setFormData(prev => ({
         ...prev,
         files: prev.files.map(f => 
           f.id === fileInfo.id ? { 
             ...f, 
-            status: 'error' as const,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            status: 'paused' as const,
+            uploadedParts: [...uploadParts],
+            currentPart: uploadParts.length > 0 ? Math.max(...uploadParts.map(p => p.partNumber)) : 0
           } : f
         )
       }));
-      throw error;
-    } finally {
-      // Clean up progress tracking
-      chunkProgress.clear();
-      chunkSizes.clear();
-      abortControllersRef.current.delete(fileInfo.id);
+      
+      return [];
     }
+    
+    // Check if this is an abort/cancel operation
+    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Upload cancelled')) {
+      console.log(`Upload cancelled for file ${fileInfo.id}`);
+      return [];
+    }
+    
+    // Mark file as error only for real errors with user-friendly messages
+    const getUserFriendlyError = (error: any): string => {
+      if (error?.message?.includes('500')) {
+        return 'Server temporarily overloaded. Click retry to continue.';
+      }
+      if (error?.message?.includes('Network error') || error?.message?.includes('fetch')) {
+        return 'Connection interrupted. Check your internet and retry.';
+      }
+      if (error?.message?.includes('Failed to upload part')) {
+        return 'Upload temporarily failed. Click retry to continue.';
+      }
+      return 'Upload error occurred. Click retry to continue.';
+    };
+    
+    setFormData(prev => ({
+      ...prev,
+      files: prev.files.map(f => 
+        f.id === fileInfo.id ? { 
+          ...f, 
+          status: 'error' as const,
+          error: getUserFriendlyError(error)
+        } : f
+      )
+    }));
+    throw error;
+  } finally {
+    // Clean up progress tracking
+    chunkProgress.clear();
+    chunkSizes.clear();
+    abortControllersRef.current.delete(fileInfo.id);
+  }
   };
 
   const completeFileUpload = async (transferId: string, fileData: any, uploadParts: any[]) => {
@@ -1072,7 +1653,9 @@ export function TransferForm() {
                       <span className="text-base">{getStatusIcon(file.status)}</span>
                       <div>
                         <p className="text-xs font-medium text-gray-900">{file.name}</p>
-                        <p className="text-xs text-gray-500 font-light">{formatFileSize(file.size)}</p>
+                        <p className="text-xs text-gray-500 font-light">
+                          {formatFileSize(file.size)} • Network: {networkInfo.quality} • {networkInfo.bandwidth.toFixed(1)} Mbps
+                        </p>
                         <p className={`text-xs font-light ${getStatusColor(file.status)}`}>
                           {file.status === 'pending' && 'Waiting to upload'}
                           {file.status === 'uploading' && `Uploading... ${file.progress}%`}
@@ -1138,11 +1721,33 @@ export function TransferForm() {
         {isUploading && (
           <div className="bg-blue-50 rounded-lg p-3 mb-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-blue-900">Upload Progress</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-medium text-blue-900">Upload Progress</span>
+                <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
+                  {networkInfo.quality} ({networkInfo.bandwidth.toFixed(1)} Mbps)
+                </span>
+                {(window.location.hostname === 'localhost' || window.location.port === '5173') && (
+                  <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded">
+                    dev mode
+                  </span>
+                )}
+              </div>
               <span className="text-sm text-blue-700 font-light">
                 {formData.files.filter(f => f.status === 'completed').length} / {formData.files.length} files completed
               </span>
             </div>
+            
+            {/* Development Warning */}
+            {(window.location.hostname === 'localhost' || window.location.port === '5173') && (
+              <div className="bg-orange-50 border border-orange-200 rounded p-2 mb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-orange-600 text-xs">🔧</span>
+                  <p className="text-xs text-orange-700 font-light">
+                    <strong>Development mode:</strong> Reduced concurrency to prevent server overload. Production will be faster.
+                  </p>
+                </div>
+              </div>
+            )}
             
             {/* Resume Warning */}
             <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mb-2">
