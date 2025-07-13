@@ -257,6 +257,48 @@ async function handleOpenAuth(c: any) {
           .logo img {
             max-height: 60px;
           }
+          
+          /* Mobile responsiveness fixes */
+          @media (max-width: 768px) {
+            /* Ensure form container has proper padding */
+            .form-container {
+              padding: 1rem !important;
+              max-width: 100% !important;
+            }
+            
+            /* Fix input field widths */
+            input[type="email"], 
+            input[type="text"], 
+            input[type="password"] {
+              width: 100% !important;
+              max-width: 100% !important;
+              box-sizing: border-box !important;
+              padding: 0.75rem !important;
+              font-size: 16px !important; /* Prevents zoom on iOS */
+            }
+            
+            /* Fix button widths */
+            button {
+              width: 100% !important;
+              max-width: 100% !important;
+              box-sizing: border-box !important;
+              padding: 0.75rem !important;
+              min-height: 44px !important; /* Touch target size */
+            }
+            
+            /* Ensure form doesn't overflow */
+            form {
+              width: 100% !important;
+              max-width: 100% !important;
+              box-sizing: border-box !important;
+            }
+            
+            /* Add proper margins to prevent edge touching */
+            .auth-container {
+              margin: 1rem !important;
+              max-width: calc(100vw - 2rem) !important;
+            }
+          }
         `
       },
       success: async (ctx, value) => {

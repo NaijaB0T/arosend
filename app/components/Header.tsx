@@ -15,30 +15,10 @@ export function Header() {
         {/* Logo */}
         <Link 
           to="/" 
-          className="text-white hover:opacity-80 transition-opacity flex items-center"
+          className="text-lg md:text-2xl font-bold text-white hover:opacity-80 transition-opacity font-logo"
           onClick={closeMenu}
         >
-          <svg 
-            width="240" 
-            height="32" 
-            viewBox="0 0 240 32" 
-            className="h-8 w-auto text-white"
-            role="img"
-            aria-label="Arosend"
-          >
-            <text 
-              x="4" 
-              y="24" 
-              fill="white" 
-              fontSize="18" 
-              fontFamily="StretchPro, Aonic, system-ui, sans-serif" 
-              fontWeight="bold"
-              className="font-logo"
-            >
-              AA r o SS e n d
-            </text>
-          </svg>
-          <span className="sr-only">Arosend</span>
+          AA r o SS e n d
         </Link>
         
         {/* Desktop Navigation */}
