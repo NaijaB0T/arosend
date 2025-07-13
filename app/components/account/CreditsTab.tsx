@@ -46,6 +46,16 @@ export function CreditsTab() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
 
+  // Calculate 5% transaction fee
+  const calculateTransactionFee = (amount: number) => {
+    return Math.ceil(amount * 0.05); // 5% fee, rounded up
+  };
+
+  // Calculate total amount including fee
+  const calculateTotalWithFee = (amount: number) => {
+    return amount + calculateTransactionFee(amount);
+  };
+
   // Check for payment success parameter
   useEffect(() => {
     const paymentStatus = searchParams.get('payment');
@@ -166,7 +176,8 @@ export function CreditsTab() {
           "Authorization": `Bearer ${user?.id}`,
         },
         body: JSON.stringify({
-          amount: parseFloat(amount) * 100, // Convert to kobo
+          amount: Math.ceil(parseFloat(amount) * 1.05) * 100, // Add 5% fee and convert to kobo
+          credits_to_receive: parseInt(amount), // Actual credits user will receive
           email: user?.email,
         }),
       });
@@ -263,13 +274,39 @@ export function CreditsTab() {
           <p className="text-xs text-white/50 mt-1">Minimum amount: ₦100</p>
         </div>
 
+        {/* Fee breakdown */}
+        {amount && parseFloat(amount) >= 100 && (
+          <div className="mb-4 p-4 bg-white/5 rounded-lg">
+            <h4 className="text-sm font-medium text-white mb-2">Payment Breakdown</h4>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between text-white/80">
+                <span>Credits to receive:</span>
+                <span>₦{parseFloat(amount).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-white/80">
+                <span>Transaction fee (5%):</span>
+                <span>₦{calculateTransactionFee(parseFloat(amount)).toLocaleString()}</span>
+              </div>
+              <div className="border-t border-white/20 pt-1 mt-2">
+                <div className="flex justify-between font-medium">
+                  <span>Total payment:</span>
+                  <span className="text-green-400">₦{calculateTotalWithFee(parseFloat(amount)).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-white/60 mt-2">
+              💳 Transaction fee covers payment processing and operational costs
+            </p>
+          </div>
+        )}
+
         {/* Fund button */}
         <button
           onClick={handleFundAccount}
           disabled={!amount || parseFloat(amount) < 100 || fundingLoading}
           className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
         >
-          {fundingLoading ? "Processing..." : `Fund Account with ₦${amount ? parseFloat(amount).toLocaleString() : "0"}`}
+          {fundingLoading ? "Processing..." : amount && parseFloat(amount) >= 100 ? `Pay ₦${calculateTotalWithFee(parseFloat(amount)).toLocaleString()}` : "Fund Account"}
         </button>
       </div>
 

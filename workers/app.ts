@@ -100,7 +100,8 @@ const CompleteTransferSchema = z.object({
 });
 
 const PaymentInitializeSchema = z.object({
-  amount: z.number().int().min(10000), // Minimum ₦100 in kobo
+  amount: z.number().int().min(10000), // Minimum ₦100 in kobo (total including fee)
+  credits_to_receive: z.number().int().min(100).optional(), // Actual credits user will receive
   email: z.string().email(),
   callback_url: z.string().url().optional()
 });
@@ -949,9 +950,9 @@ app.post("/api/extend-transfer-credits", async (c) => {
       return c.json({ error: 'No files found for transfer' }, 404);
     }
     
-    // Calculate total extension cost
+    // Calculate total extension cost using precise calculation for credits
     const totalSizeBytes = files.results.reduce((sum, file) => sum + (file.filesize as number), 0);
-    const extensionCost = calculateExtensionCost(totalSizeBytes, days);
+    const extensionCost = calculatePreciseExtensionCost(totalSizeBytes, days);
     
     // Check user's credit balance
     const user = await c.env.DB.prepare(`
@@ -1015,11 +1016,18 @@ app.post("/api/extend-transfer-credits", async (c) => {
   }
 });
 
-// Calculate extension cost based on file size and days
+// Calculate extension cost based on file size and days (rounded up for guest payments)
 function calculateExtensionCost(fileSizeBytes: number, days: number): number {
   const fileSizeGB = fileSizeBytes / (1024 * 1024 * 1024); // Convert bytes to GB
   const costPerGBPerDay = 2; // ₦2 per GB per day
   return Math.ceil(fileSizeGB * days * costPerGBPerDay); // Round up to nearest naira
+}
+
+// Calculate precise extension cost for credit-based extensions
+function calculatePreciseExtensionCost(fileSizeBytes: number, days: number): number {
+  const fileSizeGB = fileSizeBytes / (1024 * 1024 * 1024); // Convert bytes to GB
+  const costPerGBPerDay = 2; // ₦2 per GB per day
+  return fileSizeGB * days * costPerGBPerDay; // Precise calculation without rounding
 }
 
 // Get user's managed files
@@ -1083,8 +1091,8 @@ app.post("/api/files/extend", async (c) => {
       return c.json({ error: 'File not found or not accessible' }, 404);
     }
     
-    // Calculate extension cost
-    const extensionCost = calculateExtensionCost(file.filesize as number, validatedData.days);
+    // Calculate extension cost using precise calculation for credits
+    const extensionCost = calculatePreciseExtensionCost(file.filesize as number, validatedData.days);
     
     // Check user's credit balance
     const user = await c.env.DB.prepare(`
@@ -1356,7 +1364,12 @@ app.post("/api/payments/initialize", async (c) => {
     // Create transaction record
     const transactionId = crypto.randomUUID();
     const reference = `aroko_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    const credits = Math.floor(validatedData.amount / 100); // Convert kobo back to Naira (1 naira = 1 credit)
+    
+    // Use credits_to_receive if provided (new fee structure), otherwise use old calculation
+    const credits = validatedData.credits_to_receive || Math.floor(validatedData.amount / 100);
+    const totalAmount = validatedData.amount;
+    const creditValue = credits * 100; // Convert credits to kobo
+    const fee = totalAmount - creditValue; // Calculate fee
     
     await c.env.DB.prepare(`
       INSERT INTO transactions (id, user_id, type, amount, credits, description, reference, status, created_at, updated_at)
@@ -1365,9 +1378,9 @@ app.post("/api/payments/initialize", async (c) => {
       transactionId,
       userId,
       'credit',
-      validatedData.amount,
+      totalAmount,
       credits,
-      `Credit purchase - ${credits} credits`,
+      `Credit purchase - ${credits} credits (₦${Math.floor(fee/100)} fee included)`,
       reference,
       'pending',
       Date.now(),
@@ -1389,7 +1402,8 @@ app.post("/api/payments/initialize", async (c) => {
         metadata: {
           userId: userId,
           transactionId: transactionId,
-          credits: credits
+          credits: credits,
+          fee_included: Math.floor(fee/100) // Fee amount in Naira for tracking
         }
       })
     });

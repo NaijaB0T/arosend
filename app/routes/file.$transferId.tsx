@@ -89,6 +89,16 @@ export default function FilePage() {
     }
   }, [showCreditsModal, credits]);
 
+  useEffect(() => {
+    // Set minimum extension days for guests when extension panel opens
+    if (showExtension && !isAuthenticated && transfer) {
+      const minDays = calculateMinimumDaysForGuests();
+      if (extensionDays < minDays) {
+        setExtensionDays(minDays);
+      }
+    }
+  }, [showExtension, isAuthenticated, transfer]);
+
   const fetchTransfer = async () => {
     try {
       const response = await fetch(`/api/transfers/${transferId}`);
@@ -148,13 +158,101 @@ export default function FilePage() {
   const calculateExtensionCost = () => {
     if (!transfer) return 0;
     const totalSizeGB = transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024);
-    return Math.ceil(totalSizeGB * extensionDays * 2); // ₦2 per GB per day
+    return totalSizeGB * extensionDays * 2; // ₦2 per GB per day - precise calculation
+  };
+
+  const formatCost = (cost: number): string => {
+    if (cost >= 1) {
+      return cost.toFixed(2);
+    }
+    
+    // For values less than 1, find first 2 non-zero digits
+    const costStr = cost.toString();
+    const decimalIndex = costStr.indexOf('.');
+    
+    if (decimalIndex === -1) return cost.toFixed(2);
+    
+    let nonZeroCount = 0;
+    let precision = 0;
+    
+    for (let i = decimalIndex + 1; i < costStr.length; i++) {
+      precision++;
+      if (costStr[i] !== '0') {
+        nonZeroCount++;
+        if (nonZeroCount === 2) break;
+      }
+    }
+    
+    return cost.toFixed(Math.max(2, precision));
+  };
+
+  // Calculate minimum days needed for ₦100 minimum payment for guests
+  const calculateMinimumDaysForGuests = () => {
+    if (!transfer || isAuthenticated) return 1;
+    
+    const totalSizeGB = transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024);
+    if (totalSizeGB === 0) return 1;
+    
+    // Calculate days needed for ₦100: 100 = totalSizeGB * days * 2
+    // So days = 100 / (totalSizeGB * 2)
+    const daysFor100Naira = 100 / (totalSizeGB * 2);
+    
+    // Cap at 200 days maximum
+    const cappedDays = Math.min(daysFor100Naira, 200);
+    
+    // Round up to ensure we meet minimum ₦100
+    return Math.ceil(cappedDays);
+  };
+
+  // Get the cost for guest users (₦100 base + excess days if any)
+  const getGuestCost = () => {
+    if (!transfer || isAuthenticated) return Math.ceil(calculateExtensionCost());
+    
+    const minDays = calculateMinimumDaysForGuests();
+    const totalSizeGB = transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024);
+    
+    if (extensionDays <= minDays) {
+      return 100; // Fixed ₦100 for minimum days
+    } else {
+      // ₦100 base + excess days at actual rate
+      const excessDays = extensionDays - minDays;
+      const dailyRate = totalSizeGB * 2; // ₦2 per GB per day
+      const excessCost = excessDays * dailyRate;
+      return Math.ceil(100 + excessCost); // Round up the total
+    }
+  };
+
+  // Get breakdown of guest cost for display
+  const getGuestCostBreakdown = () => {
+    if (!transfer || isAuthenticated) return null;
+    
+    const minDays = calculateMinimumDaysForGuests();
+    const totalSizeGB = transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024);
+    
+    if (extensionDays <= minDays) {
+      return {
+        baseCost: 100,
+        excessCost: 0,
+        excessDays: 0,
+        total: 100
+      };
+    } else {
+      const excessDays = extensionDays - minDays;
+      const dailyRate = totalSizeGB * 2;
+      const excessCost = excessDays * dailyRate;
+      return {
+        baseCost: 100,
+        excessCost: Math.ceil(excessCost),
+        excessDays,
+        total: Math.ceil(100 + excessCost)
+      };
+    }
   };
 
   const extendTransfer = async () => {
     if (!guestEmail || !transfer) return;
     
-    const cost = calculateExtensionCost();
+    const cost = getGuestCost(); // Use smart guest cost calculation
     if (cost < 100) {
       alert('Minimum extension cost is ₦100');
       return;
@@ -187,10 +285,20 @@ export default function FilePage() {
     }
   };
 
+  // Calculate 5% transaction fee
+  const calculateTransactionFee = (amount: number) => {
+    return Math.ceil(amount * 0.05); // 5% fee, rounded up
+  };
+
+  // Calculate total amount including fee
+  const calculateTotalWithFee = (amount: number) => {
+    return amount + calculateTransactionFee(amount);
+  };
+
   const extendTransferWithCredits = async () => {
     if (!transfer || !user) return;
     
-    const cost = calculateExtensionCost();
+    const cost = calculateExtensionCost(); // Use precise cost for credit calculation
     if (credits < cost) {
       setShowCreditsModal(true);
       return;
@@ -221,7 +329,7 @@ export default function FilePage() {
 
       const result = await response.json();
       setCredits(result.remaining_credits);
-      alert(`Transfer extended successfully! ${cost} credits used.`);
+      alert(`Transfer extended successfully! ₦${formatCost(cost)} credits used.`);
       setShowExtension(false);
       
       // Refresh transfer data to show new expiry
@@ -238,6 +346,10 @@ export default function FilePage() {
     
     setCreditPaymentLoading(true);
     try {
+      // Calculate total amount including 5% fee
+      const fee = Math.ceil(creditAmount * 0.05); // 5% fee, rounded up
+      const totalAmount = creditAmount + fee;
+      
       // Initialize payment with Paystack
       const response = await fetch('/api/payments/initialize', {
         method: 'POST',
@@ -246,7 +358,8 @@ export default function FilePage() {
           'Authorization': `Bearer ${user.id}`
         },
         body: JSON.stringify({
-          amount: creditAmount * 100, // Convert to kobo
+          amount: totalAmount * 100, // Convert to kobo
+          credits_to_receive: creditAmount, // Actual credits user will receive
           email: user.email,
           callback_url: `${window.location.origin}/file/${transferId}?payment=success`
         })
@@ -459,7 +572,7 @@ export default function FilePage() {
                       <div className="flex justify-between items-center">
                         <span className="text-white">Cost in Credits:</span>
                         <span className="text-2xl font-bold text-green-400">
-                          ₦{calculateExtensionCost().toLocaleString()}
+                          ₦{formatCost(calculateExtensionCost())}
                         </span>
                       </div>
                       <p className="text-white/60 text-sm mt-1">
@@ -467,7 +580,7 @@ export default function FilePage() {
                       </p>
                       {!creditsLoading && credits < calculateExtensionCost() && (
                         <p className="text-red-400 text-sm mt-2">
-                          Insufficient credits. You need ₦{(calculateExtensionCost() - credits).toLocaleString()} more.
+                          Insufficient credits. You need ₦{formatCost(calculateExtensionCost() - credits)} more.
                         </p>
                       )}
                     </div>
@@ -496,12 +609,19 @@ export default function FilePage() {
                         <label className="block text-white font-medium mb-2">Extension Days</label>
                         <input
                           type="number"
-                          min="1"
+                          min={calculateMinimumDaysForGuests()}
                           max="365"
                           value={extensionDays}
-                          onChange={(e) => setExtensionDays(parseInt(e.target.value) || 1)}
+                          onChange={(e) => {
+                            const newDays = parseInt(e.target.value) || calculateMinimumDaysForGuests();
+                            const minDays = calculateMinimumDaysForGuests();
+                            setExtensionDays(Math.max(newDays, minDays));
+                          }}
                           className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                         />
+                        <p className="text-white/60 text-xs mt-1">
+                          Minimum {calculateMinimumDaysForGuests()} days for ₦100 minimum payment
+                        </p>
                       </div>
                       <div>
                         <label className="block text-white font-medium mb-2">Your Email</label>
@@ -519,12 +639,50 @@ export default function FilePage() {
                       <div className="flex justify-between items-center">
                         <span className="text-white">Total Cost:</span>
                         <span className="text-2xl font-bold text-green-400">
-                          ₦{calculateExtensionCost().toLocaleString()}
+                          ₦{getGuestCost().toLocaleString()}
                         </span>
                       </div>
+                      
+                      {(() => {
+                        const breakdown = getGuestCostBreakdown();
+                        if (!breakdown) return null;
+                        
+                        if (breakdown.excessDays > 0) {
+                          return (
+                            <div className="mt-3 space-y-1">
+                              <div className="flex justify-between text-sm text-white/80">
+                                <span>Base cost ({calculateMinimumDaysForGuests()} days):</span>
+                                <span>₦{breakdown.baseCost.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between text-sm text-white/80">
+                                <span>Extra cost ({breakdown.excessDays} additional days):</span>
+                                <span>₦{breakdown.excessCost.toLocaleString()}</span>
+                              </div>
+                              <div className="border-t border-white/20 pt-1"></div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                      
                       <p className="text-white/60 text-sm mt-1">
                         ₦2 per GB per day • Minimum ₦100
                       </p>
+                      
+                      {extensionDays === calculateMinimumDaysForGuests() && (
+                        <p className="text-blue-400 text-sm mt-2">
+                          ✨ Extended to {extensionDays} days to meet minimum payment requirement
+                        </p>
+                      )}
+                      
+                      {(() => {
+                        const breakdown = getGuestCostBreakdown();
+                        return breakdown && breakdown.excessDays > 0 && (
+                          <p className="text-yellow-400 text-sm mt-2">
+                            💡 {breakdown.excessDays} extra days beyond minimum at actual rate
+                          </p>
+                        );
+                      })()}
                     </div>
 
                     <div className="mt-6 flex gap-3">
@@ -536,7 +694,7 @@ export default function FilePage() {
                       </button>
                       <button
                         onClick={extendTransfer}
-                        disabled={!guestEmail || calculateExtensionCost() < 100 || paymentLoading}
+                        disabled={!guestEmail || getGuestCost() < 100 || paymentLoading}
                         className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {paymentLoading ? 'Processing...' : 'Pay & Extend'}
@@ -553,13 +711,13 @@ export default function FilePage() {
                 <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/20 max-w-md w-full">
                   <h3 className="text-xl font-bold text-white mb-4">Add Credits</h3>
                   <p className="text-white/70 mb-6">
-                    You need ₦{calculateExtensionCost().toLocaleString()} credits to extend this transfer, but you only have ₦{credits.toLocaleString()}.
+                    You need ₦{formatCost(calculateExtensionCost())} credits to extend this transfer, but you only have ₦{credits.toLocaleString()}.
                   </p>
                   
                   <div className="space-y-3 mb-6">
                     <div className="flex justify-between text-white">
                       <span>Required:</span>
-                      <span className="font-medium">₦{calculateExtensionCost().toLocaleString()}</span>
+                      <span className="font-medium">₦{formatCost(calculateExtensionCost())}</span>
                     </div>
                     <div className="flex justify-between text-white">
                       <span>Available:</span>
@@ -567,7 +725,7 @@ export default function FilePage() {
                     </div>
                     <div className="border-t border-white/20 pt-3 flex justify-between text-white">
                       <span>Minimum needed:</span>
-                      <span className="font-bold text-red-400">₦{(calculateExtensionCost() - credits).toLocaleString()}</span>
+                      <span className="font-bold text-red-400">₦{formatCost(calculateExtensionCost() - credits)}</span>
                     </div>
                   </div>
 
@@ -587,14 +745,26 @@ export default function FilePage() {
                   </div>
 
                   <div className="mb-6 p-4 bg-white/5 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="text-white">Total Payment:</span>
-                      <span className="text-2xl font-bold text-green-400">
-                        ₦{creditAmount.toLocaleString()}
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-sm text-white/80">
+                        <span>Credits to receive:</span>
+                        <span>₦{creditAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm text-white/80">
+                        <span>Transaction fee (5%):</span>
+                        <span>₦{calculateTransactionFee(creditAmount).toLocaleString()}</span>
+                      </div>
+                      <div className="border-t border-white/20 pt-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-white font-medium">Total Payment:</span>
+                          <span className="text-2xl font-bold text-green-400">
+                            ₦{calculateTotalWithFee(creditAmount).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-white/60 text-sm mt-1">
-                      You'll receive {creditAmount} credits
+                    <p className="text-white/60 text-xs mt-3">
+                      💳 All transactions include a 5% processing fee to cover payment gateway and operational costs
                     </p>
                   </div>
 
