@@ -127,7 +127,7 @@ async function sendEmailWithResend(apiKey: string, to: string, subject: string, 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Àrokò <onboarding@aroko.femitaofeeq.com>',
+        from: 'Arosend <onboarding@aroko.femitaofeeq.com>',
         to: [to],
         subject: subject,
         html: html,
@@ -197,7 +197,7 @@ async function handleOpenAuth(c: any) {
               const emailHtml = `
                 <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                   <div style="text-align: center; margin-bottom: 30px;">
-                    <h1 style="color: #4f46e5; margin: 0;">Àrokò</h1>
+                    <h1 style="color: #4f46e5; margin: 0;">Arosend</h1>
                     <p style="color: #666; margin: 5px 0 0 0;">Secure File Transfer</p>
                   </div>
                   
@@ -219,7 +219,7 @@ async function handleOpenAuth(c: any) {
                 const success = await sendEmailWithResend(
                   c.env.RESEND_API_KEY, 
                   email, 
-                  'Your Àrokò Verification Code', 
+                  'Your Arosend Verification Code', 
                   emailHtml
                 );
                 
@@ -239,12 +239,12 @@ async function handleOpenAuth(c: any) {
         ),
       },
       theme: {
-        title: "Àrokò",
+        title: "Arosend",
         primary: "#4f46e5",
         favicon: "https://workers.cloudflare.com/favicon.ico",
         logo: {
-          dark: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjUwIiB2aWV3Qm94PSIwIDAgMjAwIDUwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWksIC1hcHBsZS1zeXN0ZW0sIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjMzMzMzMzIj7DgHJva8OyPC90ZXh0Pgo8L3N2Zz4K",
-          light: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjUwIiB2aWV3Qm94PSIwIDAgMjAwIDUwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWksIC1hcHBsZS1zeXN0ZW0sIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjMzMzMzMzIj7DgHJva8OyPC90ZXh0Pgo8L3N2Zz4K"
+          dark: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjUwIiB2aWV3Qm94PSIwIDAgMjAwIDUwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWksIC1hcHBsZS1zeXN0ZW0sIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjMzMzMzMzIj5Bcm9zZW5kPC90ZXh0Pgo8L3N2Zz4",
+          light: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjUwIiB2aWV3Qm94PSIwIDAgMjAwIDUwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8dGV4dCB4PSIxMCIgeT0iMzUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWksIC1hcHBsZS1zeXN0ZW0sIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjMzMzMzMzIj5Bcm9zZW5kPC90ZXh0Pgo8L3N2Zz4"
         },
         css: `
           /* Style the logo/branding area */
@@ -1363,7 +1363,7 @@ app.post("/api/payments/initialize", async (c) => {
     
     // Create transaction record
     const transactionId = crypto.randomUUID();
-    const reference = `aroko_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const reference = `arosend_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
     // Use credits_to_receive if provided (new fee structure), otherwise use old calculation
     const credits = validatedData.credits_to_receive || Math.floor(validatedData.amount / 100);

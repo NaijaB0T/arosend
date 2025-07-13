@@ -60,6 +60,11 @@ button, a {
   -webkit-overflow-scrolling: touch;
 }
 
+/* StretchPro Logo Font */
+.font-logo {
+  font-family: 'StretchPro', 'Aonic', system-ui, sans-serif !important;
+}
+
 /* Custom responsive utilities for extra small screens */
 @media (min-width: 480px) {
   .xs\:inline {

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="240" height="32" viewBox="0 0 240 32" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style type="text/css">
+      <![CDATA[
+        @font-face {
+          font-family: 'StretchPro';
+          src: url('./fonts/StretchPro.woff2') format('woff2');
+          font-weight: normal;
+          font-style: normal;
+          font-display: swap;
+        }
+        
+        .logo-text {
+          font-family: 'StretchPro', 'Aonic', system-ui, sans-serif;
+          font-weight: bold;
+          font-size: 18px;
+          fill: white;
+        }
+        
+        .logo-text-dark {
+          font-family: 'StretchPro', 'Aonic', system-ui, sans-serif;
+          font-weight: bold;
+          font-size: 18px;
+          fill: #333333;
+        }
+      ]]>
+    </style>
+  </defs>
+  
+  <!-- Light version (white text) -->
+  <g id="light-logo">
+    <text x="4" y="24" class="logo-text">AA r o SS e n d</text>
+  </g>
+  
+  <!-- Dark version (dark text) - hidden by default -->
+  <g id="dark-logo" style="display: none;">
+    <text x="4" y="24" class="logo-text-dark">AA r o SS e n d</text>
+  </g>
+</svg>

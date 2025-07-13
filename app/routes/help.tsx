@@ -6,8 +6,8 @@ import { useState } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Help & Support - Àrokò" },
-    { name: "description", content: "Get help with Àrokò file transfers and storage. Find answers to common questions and contact support." },
+    { title: "Help & Support - Arosend" },
+    { name: "description", content: "Get help with Arosend file transfers and storage. Find answers to common questions and contact support." },
   ];
 }
 

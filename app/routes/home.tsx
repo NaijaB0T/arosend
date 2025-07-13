@@ -6,8 +6,8 @@ import { useState, useEffect } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Aroko - Ancient Yoruba Way of Sending Files" },
-    { name: "description", content: "Send large files with the ancient Yoruba way of messaging. Pay-as-you-use storage from ₦60/month or ₦2/day. Free transfers included!" },
+    { title: "Arosend - Secure File Transfer and Storage" },
+    { name: "description", content: "Send large files securely with pay-as-you-use storage from ₦60/month or ₦2/day. Free transfers included!" },
   ];
 }
 

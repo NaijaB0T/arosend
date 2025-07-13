@@ -10,8 +10,8 @@ import type { Route } from "./+types/account";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Account Management - Aroko" },
-    { name: "description", content: "Manage your Aroko account, credits, and settings." },
+    { title: "Account Management - Arosend" },
+    { name: "description", content: "Manage your Arosend account, credits, and settings." },
   ];
 }
 

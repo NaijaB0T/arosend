@@ -5,8 +5,8 @@ import { Link } from "react-router";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Features - Àrokò" },
-    { name: "description", content: "Discover Àrokò's powerful file transfer and storage features. Pay-as-you-use pricing, secure transfers, and long-term storage options." },
+    { title: "Features - Arosend" },
+    { name: "description", content: "Discover Arosend's powerful file transfer and storage features. Pay-as-you-use pricing, secure transfers, and long-term storage options." },
   ];
 }
 
@@ -92,7 +92,7 @@ export default function Features() {
               Ready to Start Sharing?
             </h2>
             <p className="text-white/70 mb-6 text-lg">
-              Join thousands of users who trust Àrokò for their file transfer needs.
+              Join thousands of users who trust Arosend for their file transfer needs.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link 

@@ -7,7 +7,7 @@ import { useAuth } from "../lib/auth";
 
 export function meta({ params }: Route.MetaArgs) {
   return [
-    { title: `File Transfer - ${params.transferId} - Àrokò` },
+    { title: `File Transfer - ${params.transferId} - Arosend` },
     { name: "description", content: "Your file transfer details and download link. Extend storage time or share with others." },
   ];
 }
