@@ -20,6 +20,7 @@ export default function Account() {
   const [activeTab, setActiveTab] = useState("files");
   const [expandedWidget, setExpandedWidget] = useState<'transfer' | 'account' | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [isMobileTransferCollapsed, setIsMobileTransferCollapsed] = useState(true);
   
   // Derived states for backward compatibility
   const isTransferExpanded = expandedWidget === 'transfer';
@@ -76,13 +77,93 @@ export default function Account() {
         
         {/* Main content area */}
         <div className="px-4 md:px-6 py-4 md:py-8 pb-20">
-          <div className={`w-full max-w-7xl mx-auto grid grid-cols-1 gap-6 lg:gap-8 items-start transition-all duration-500 ${
+          {/* Mobile Layout */}
+          <div className="lg:hidden">
+            {/* Mobile Transfer Widget - Collapsible */}
+            <div className="mb-6">
+              <button
+                onClick={() => setIsMobileTransferCollapsed(!isMobileTransferCollapsed)}
+                className="w-full bg-white/10 backdrop-blur-lg rounded-lg p-4 border border-white/20 text-white flex items-center justify-between hover:bg-white/15 transition-colors"
+              >
+                <div className="flex items-center">
+                  <span className="text-lg mr-2">📤</span>
+                  <span className="font-medium">Quick Transfer</span>
+                </div>
+                <svg 
+                  className={`w-5 h-5 transition-transform ${isMobileTransferCollapsed ? '' : 'rotate-180'}`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {!isMobileTransferCollapsed && (
+                <div className="mt-4 bg-white rounded-2xl shadow-xl p-4">
+                  <div className="max-h-[60vh] overflow-y-auto">
+                    <TransferForm />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Account Management */}
+            <div>
+              {/* Header */}
+              <div className="mb-6">
+                <h1 className="text-2xl font-bold text-white mb-2">Account Management</h1>
+                <p className="text-white/70 text-sm">Welcome back, {user?.email}</p>
+              </div>
+
+              {/* Tabs */}
+              <div className="bg-white/10 backdrop-blur-lg rounded-lg p-4 border border-white/20">
+                <div className="flex flex-wrap gap-1 mb-4 overflow-x-auto">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 whitespace-nowrap ${
+                        activeTab === tab.id
+                          ? "bg-indigo-600 text-white"
+                          : "text-white/70 hover:text-white hover:bg-white/10"
+                      }`}
+                    >
+                      <span>{tab.icon}</span>
+                      <span className="text-sm">{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab Content */}
+                <div className="space-y-4">
+                  {activeTab === "files" && <FilesTab />}
+                  {activeTab === "credits" && <CreditsTab />}
+                  {activeTab === "profile" && (
+                    <div className="text-white">
+                      <h2 className="text-lg font-semibold mb-4">Profile Settings</h2>
+                      <p className="text-white/70 text-sm">Profile management coming soon...</p>
+                    </div>
+                  )}
+                  {activeTab === "settings" && (
+                    <div className="text-white">
+                      <h2 className="text-lg font-semibold mb-4">Account Settings</h2>
+                      <p className="text-white/70 text-sm">Settings management coming soon...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Layout */}
+          <div className={`hidden lg:grid w-full max-w-7xl mx-auto grid-cols-1 gap-6 lg:gap-8 items-start transition-all duration-500 ${
             isTransferExpanded ? 'lg:grid-cols-5' : isAccountExpanded ? 'lg:grid-cols-6' : 'lg:grid-cols-4'
           }`}>
             
-            {/* Left side - Transfer widget */}
+            {/* Left side - Transfer widget (Desktop) */}
             <div 
-              className={`order-2 lg:order-1 transition-all duration-500 ${
+              className={`transition-all duration-500 ${
                 isTransferExpanded ? 'lg:col-span-3' : isAccountExpanded ? 'lg:col-span-1' : 'lg:col-span-1'
               }`}
               onMouseEnter={() => handleWidgetExpansion('transfer')}
@@ -97,9 +178,9 @@ export default function Account() {
               </div>
             </div>
 
-            {/* Right side - Account Management */}
+            {/* Right side - Account Management (Desktop) */}
             <div 
-              className={`order-1 lg:order-2 transition-all duration-500 ${
+              className={`transition-all duration-500 ${
                 isTransferExpanded ? 'lg:col-span-2' : isAccountExpanded ? 'lg:col-span-5' : 'lg:col-span-3'
               }`}
               onFocus={() => handleWidgetExpansion('account')}

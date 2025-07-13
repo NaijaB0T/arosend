@@ -2,6 +2,7 @@ import type { Route } from "./+types/file.$transferId";
 import { BackgroundManager } from "../components/BackgroundManager";
 import { Header } from "../components/Header";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "react-router";
 import { useAuth } from "../lib/auth";
 
@@ -475,7 +476,7 @@ export default function FilePage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowExtension(!showExtension)}
+                  onClick={() => setShowExtension(true)}
                   className="mt-4 md:mt-0 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
                 >
                   Extend Time
@@ -510,22 +511,24 @@ export default function FilePage() {
                 <h3 className="text-white font-medium mb-4">Files ({transfer.files.length})</h3>
                 <div className="space-y-3">
                   {transfer.files.map((file) => (
-                    <div key={file.id} className="flex items-center justify-between bg-white/5 rounded-lg p-4">
-                      <div className="flex items-center">
-                        <div className="text-2xl mr-3">📁</div>
-                        <div>
-                          <p className="text-white font-medium">{file.filename}</p>
-                          <p className="text-white/60 text-sm">{formatFileSize(file.size)}</p>
+                    <div key={file.id} className="bg-white/5 rounded-lg p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center mb-3 sm:mb-0">
+                          <div className="text-2xl mr-3">📁</div>
+                          <div>
+                            <p className="text-white font-medium break-words">{file.filename}</p>
+                            <p className="text-white/60 text-sm">{formatFileSize(file.size)}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center">
-                        <a 
-                          href={`/api/file/${transfer.id}/${encodeURIComponent(file.filename)}`}
-                          download={file.filename}
-                          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                        >
-                          Ready to download
-                        </a>
+                        <div className="flex items-center">
+                          <a 
+                            href={`/api/file/${transfer.id}/${encodeURIComponent(file.filename)}`}
+                            download={file.filename}
+                            className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium text-center"
+                          >
+                            Ready to download
+                          </a>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -533,176 +536,380 @@ export default function FilePage() {
               </div>
             </div>
 
-            {/* Extension Panel */}
+            {/* Extension Modal - Desktop */}
             {showExtension && (
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/20">
-                <h3 className="text-xl font-bold text-white mb-4">Extend Storage Time</h3>
-                <p className="text-white/70 mb-6">
-                  Keep your files accessible for longer. {isAuthenticated ? 'Use your credits to extend any transfer.' : 'Pay only for the time you need.'}
-                </p>
+              <>
+                {/* Desktop Modal */}
+                <div className="hidden sm:flex fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/20 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-white">Extend Storage Time</h3>
+                      <button
+                        onClick={() => setShowExtension(false)}
+                        className="text-gray-400 hover:text-white p-2"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    <p className="text-white/70 mb-6">
+                      Keep your files accessible for longer. {isAuthenticated ? 'Use your credits to extend any transfer.' : 'Pay only for the time you need.'}
+                    </p>
 
-                {isAuthenticated ? (
-                  // Authenticated user interface
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-white font-medium mb-2">Extension Days</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="365"
-                          value={extensionDays}
-                          onChange={(e) => setExtensionDays(parseInt(e.target.value) || 1)}
-                          className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-white font-medium mb-2">Your Credits</label>
-                        <div className="bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white">
-                          {creditsLoading ? (
-                            <span className="text-white/60">Loading...</span>
-                          ) : (
-                            <span className="text-green-400 font-medium">₦{credits.toLocaleString()} available</span>
+                    {isAuthenticated ? (
+                      // Authenticated user interface
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-white font-medium mb-2">Extension Days</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="365"
+                              value={extensionDays}
+                              onChange={(e) => setExtensionDays(parseInt(e.target.value) || 1)}
+                              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-white font-medium mb-2">Your Credits</label>
+                            <div className="bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white">
+                              {creditsLoading ? (
+                                <span className="text-white/60">Loading...</span>
+                              ) : (
+                                <span className="text-green-400 font-medium">₦{credits.toLocaleString()} available</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 p-4 bg-white/5 rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="text-white">Cost in Credits:</span>
+                            <span className="text-2xl font-bold text-green-400">
+                              ₦{formatCost(calculateExtensionCost())}
+                            </span>
+                          </div>
+                          <p className="text-white/60 text-sm mt-1">
+                            ₦2 per GB per day • Deducted from your credit balance
+                          </p>
+                          {!creditsLoading && credits < calculateExtensionCost() && (
+                            <p className="text-red-400 text-sm mt-2">
+                              Insufficient credits. You need ₦{formatCost(calculateExtensionCost() - credits)} more.
+                            </p>
                           )}
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="mt-6 p-4 bg-white/5 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-white">Cost in Credits:</span>
-                        <span className="text-2xl font-bold text-green-400">
-                          ₦{formatCost(calculateExtensionCost())}
-                        </span>
-                      </div>
-                      <p className="text-white/60 text-sm mt-1">
-                        ₦2 per GB per day • Deducted from your credit balance
-                      </p>
-                      {!creditsLoading && credits < calculateExtensionCost() && (
-                        <p className="text-red-400 text-sm mt-2">
-                          Insufficient credits. You need ₦{formatCost(calculateExtensionCost() - credits)} more.
-                        </p>
-                      )}
-                    </div>
+                        <div className="mt-6 flex gap-3">
+                          <button
+                            onClick={() => setShowExtension(false)}
+                            className="flex-1 border border-white/30 text-white px-6 py-3 rounded-lg hover:bg-white/10 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={extendTransferWithCredits}
+                            disabled={creditsLoading || paymentLoading}
+                            className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {paymentLoading ? 'Processing...' : 'Extend with Credits'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      // Guest user interface
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-white font-medium mb-2">Extension Days</label>
+                            <input
+                              type="number"
+                              min={calculateMinimumDaysForGuests()}
+                              max="365"
+                              value={extensionDays}
+                              onChange={(e) => {
+                                const newDays = parseInt(e.target.value) || calculateMinimumDaysForGuests();
+                                const minDays = calculateMinimumDaysForGuests();
+                                setExtensionDays(Math.max(newDays, minDays));
+                              }}
+                              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <p className="text-white/60 text-xs mt-1">
+                              Minimum {calculateMinimumDaysForGuests()} days for ₦100 minimum payment
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-white font-medium mb-2">Your Email</label>
+                            <input
+                              type="email"
+                              placeholder="email@example.com"
+                              value={guestEmail}
+                              onChange={(e) => setGuestEmail(e.target.value)}
+                              className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                          </div>
+                        </div>
 
-                    <div className="mt-6 flex gap-3">
-                      <button
-                        onClick={() => setShowExtension(false)}
-                        className="flex-1 border border-white/30 text-white px-6 py-3 rounded-lg hover:bg-white/10 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={extendTransferWithCredits}
-                        disabled={creditsLoading || paymentLoading}
-                        className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {paymentLoading ? 'Processing...' : 'Extend with Credits'}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  // Guest user interface
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-white font-medium mb-2">Extension Days</label>
-                        <input
-                          type="number"
-                          min={calculateMinimumDaysForGuests()}
-                          max="365"
-                          value={extensionDays}
-                          onChange={(e) => {
-                            const newDays = parseInt(e.target.value) || calculateMinimumDaysForGuests();
-                            const minDays = calculateMinimumDaysForGuests();
-                            setExtensionDays(Math.max(newDays, minDays));
-                          }}
-                          className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                        <p className="text-white/60 text-xs mt-1">
-                          Minimum {calculateMinimumDaysForGuests()} days for ₦100 minimum payment
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-white font-medium mb-2">Your Email</label>
-                        <input
-                          type="email"
-                          placeholder="email@example.com"
-                          value={guestEmail}
-                          onChange={(e) => setGuestEmail(e.target.value)}
-                          className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-white/5 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span className="text-white">Total Cost:</span>
-                        <span className="text-2xl font-bold text-green-400">
-                          ₦{getGuestCost().toLocaleString()}
-                        </span>
-                      </div>
-                      
-                      {(() => {
-                        const breakdown = getGuestCostBreakdown();
-                        if (!breakdown) return null;
-                        
-                        if (breakdown.excessDays > 0) {
-                          return (
-                            <div className="mt-3 space-y-1">
-                              <div className="flex justify-between text-sm text-white/80">
-                                <span>Base cost ({calculateMinimumDaysForGuests()} days):</span>
-                                <span>₦{breakdown.baseCost.toLocaleString()}</span>
-                              </div>
-                              <div className="flex justify-between text-sm text-white/80">
-                                <span>Extra cost ({breakdown.excessDays} additional days):</span>
-                                <span>₦{breakdown.excessCost.toLocaleString()}</span>
-                              </div>
-                              <div className="border-t border-white/20 pt-1"></div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                      
-                      <p className="text-white/60 text-sm mt-1">
-                        ₦2 per GB per day • Minimum ₦100
-                      </p>
-                      
-                      {extensionDays === calculateMinimumDaysForGuests() && (
-                        <p className="text-blue-400 text-sm mt-2">
-                          ✨ Extended to {extensionDays} days to meet minimum payment requirement
-                        </p>
-                      )}
-                      
-                      {(() => {
-                        const breakdown = getGuestCostBreakdown();
-                        return breakdown && breakdown.excessDays > 0 && (
-                          <p className="text-yellow-400 text-sm mt-2">
-                            💡 {breakdown.excessDays} extra days beyond minimum at actual rate
+                        <div className="mt-6 p-4 bg-white/5 rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="text-white">Total Cost:</span>
+                            <span className="text-2xl font-bold text-green-400">
+                              ₦{getGuestCost().toLocaleString()}
+                            </span>
+                          </div>
+                          
+                          {(() => {
+                            const breakdown = getGuestCostBreakdown();
+                            if (!breakdown) return null;
+                            
+                            if (breakdown.excessDays > 0) {
+                              return (
+                                <div className="mt-3 space-y-1">
+                                  <div className="flex justify-between text-sm text-white/80">
+                                    <span>Base cost ({calculateMinimumDaysForGuests()} days):</span>
+                                    <span>₦{breakdown.baseCost.toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex justify-between text-sm text-white/80">
+                                    <span>Extra cost ({breakdown.excessDays} additional days):</span>
+                                    <span>₦{breakdown.excessCost.toLocaleString()}</span>
+                                  </div>
+                                  <div className="border-t border-white/20 pt-1"></div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                          
+                          <p className="text-white/60 text-sm mt-1">
+                            ₦2 per GB per day • Minimum ₦100
                           </p>
-                        );
-                      })()}
-                    </div>
+                          
+                          {extensionDays === calculateMinimumDaysForGuests() && (
+                            <p className="text-blue-400 text-sm mt-2">
+                              ✨ Extended to {extensionDays} days to meet minimum payment requirement
+                            </p>
+                          )}
+                          
+                          {(() => {
+                            const breakdown = getGuestCostBreakdown();
+                            return breakdown && breakdown.excessDays > 0 && (
+                              <p className="text-yellow-400 text-sm mt-2">
+                                💡 {breakdown.excessDays} extra days beyond minimum at actual rate
+                              </p>
+                            );
+                          })()}
+                        </div>
 
-                    <div className="mt-6 flex gap-3">
-                      <button
-                        onClick={() => setShowExtension(false)}
-                        className="flex-1 border border-white/30 text-white px-6 py-3 rounded-lg hover:bg-white/10 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={extendTransfer}
-                        disabled={!guestEmail || getGuestCost() < 100 || paymentLoading}
-                        className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {paymentLoading ? 'Processing...' : 'Pay & Extend'}
-                      </button>
+                        <div className="mt-6 flex gap-3">
+                          <button
+                            onClick={() => setShowExtension(false)}
+                            className="flex-1 border border-white/30 text-white px-6 py-3 rounded-lg hover:bg-white/10 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={extendTransfer}
+                            disabled={!guestEmail || getGuestCost() < 100 || paymentLoading}
+                            className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {paymentLoading ? 'Processing...' : 'Pay & Extend'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mobile Bottom Sheet Modal - Render via Portal */}
+                {typeof window !== "undefined" && createPortal(
+                  <div className="sm:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+                    <div className="fixed bottom-0 left-0 right-0 bg-gray-800 rounded-t-3xl p-6 max-h-[90vh] overflow-y-auto" style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-white">
+                          Extend Storage Time
+                        </h3>
+                        <button
+                          onClick={() => setShowExtension(false)}
+                          className="text-gray-400 hover:text-white p-2"
+                        >
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      
+                      <p className="text-white/70 mb-6">
+                        Keep your files accessible for longer. {isAuthenticated ? 'Use your credits to extend any transfer.' : 'Pay only for the time you need.'}
+                      </p>
+
+                      {isAuthenticated ? (
+                        // Authenticated user mobile interface
+                        <>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-white font-medium mb-2">Extension Days</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="365"
+                                value={extensionDays}
+                                onChange={(e) => setExtensionDays(parseInt(e.target.value) || 1)}
+                                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-white font-medium mb-2">Your Credits</label>
+                              <div className="bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white">
+                                {creditsLoading ? (
+                                  <span className="text-white/60">Loading...</span>
+                                ) : (
+                                  <span className="text-green-400 font-medium">₦{credits.toLocaleString()} available</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-6 p-4 bg-white/5 rounded-lg">
+                            <div className="flex justify-between items-center">
+                              <span className="text-white">Cost in Credits:</span>
+                              <span className="text-2xl font-bold text-green-400">
+                                ₦{formatCost(calculateExtensionCost())}
+                              </span>
+                            </div>
+                            <p className="text-white/60 text-sm mt-1">
+                              ₦2 per GB per day • Deducted from your credit balance
+                            </p>
+                            {!creditsLoading && credits < calculateExtensionCost() && (
+                              <p className="text-red-400 text-sm mt-2">
+                                Insufficient credits. You need ₦{formatCost(calculateExtensionCost() - credits)} more.
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="mt-6 flex gap-3 pb-6">
+                            <button
+                              onClick={() => setShowExtension(false)}
+                              className="flex-1 border border-white/30 text-white px-6 py-3 rounded-lg hover:bg-white/10 transition-colors font-medium"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={extendTransferWithCredits}
+                              disabled={creditsLoading || paymentLoading}
+                              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                            >
+                              {paymentLoading ? 'Processing...' : 'Extend with Credits'}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        // Guest user mobile interface
+                        <>
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-white font-medium mb-2">Extension Days</label>
+                              <input
+                                type="number"
+                                min={calculateMinimumDaysForGuests()}
+                                max="365"
+                                value={extensionDays}
+                                onChange={(e) => {
+                                  const newDays = parseInt(e.target.value) || calculateMinimumDaysForGuests();
+                                  const minDays = calculateMinimumDaysForGuests();
+                                  setExtensionDays(Math.max(newDays, minDays));
+                                }}
+                                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                              />
+                              <p className="text-white/60 text-xs mt-1">
+                                Minimum {calculateMinimumDaysForGuests()} days for ₦100 minimum payment
+                              </p>
+                            </div>
+                            <div>
+                              <label className="block text-white font-medium mb-2">Your Email</label>
+                              <input
+                                type="email"
+                                placeholder="email@example.com"
+                                value={guestEmail}
+                                onChange={(e) => setGuestEmail(e.target.value)}
+                                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-green-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-6 p-4 bg-white/5 rounded-lg">
+                            <div className="flex justify-between items-center">
+                              <span className="text-white">Total Cost:</span>
+                              <span className="text-2xl font-bold text-green-400">
+                                ₦{getGuestCost().toLocaleString()}
+                              </span>
+                            </div>
+                            
+                            {(() => {
+                              const breakdown = getGuestCostBreakdown();
+                              if (!breakdown) return null;
+                              
+                              if (breakdown.excessDays > 0) {
+                                return (
+                                  <div className="mt-3 space-y-1">
+                                    <div className="flex justify-between text-sm text-white/80">
+                                      <span>Base cost ({calculateMinimumDaysForGuests()} days):</span>
+                                      <span>₦{breakdown.baseCost.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm text-white/80">
+                                      <span>Extra cost ({breakdown.excessDays} additional days):</span>
+                                      <span>₦{breakdown.excessCost.toLocaleString()}</span>
+                                    </div>
+                                    <div className="border-t border-white/20 pt-1"></div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                            
+                            <p className="text-white/60 text-sm mt-1">
+                              ₦2 per GB per day • Minimum ₦100
+                            </p>
+                            
+                            {extensionDays === calculateMinimumDaysForGuests() && (
+                              <p className="text-blue-400 text-sm mt-2">
+                                ✨ Extended to {extensionDays} days to meet minimum payment requirement
+                              </p>
+                            )}
+                            
+                            {(() => {
+                              const breakdown = getGuestCostBreakdown();
+                              return breakdown && breakdown.excessDays > 0 && (
+                                <p className="text-yellow-400 text-sm mt-2">
+                                  💡 {breakdown.excessDays} extra days beyond minimum at actual rate
+                                </p>
+                              );
+                            })()}
+                          </div>
+
+                          <div className="mt-6 flex gap-3 pb-6">
+                            <button
+                              onClick={() => setShowExtension(false)}
+                              className="flex-1 border border-white/30 text-white px-6 py-3 rounded-lg hover:bg-white/10 transition-colors font-medium"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={extendTransfer}
+                              disabled={!guestEmail || getGuestCost() < 100 || paymentLoading}
+                              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                            >
+                              {paymentLoading ? 'Processing...' : 'Pay & Extend'}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </>
+                  </div>,
+                  document.body
                 )}
-              </div>
+              </>
             )}
 
             {/* Credits Modal */}

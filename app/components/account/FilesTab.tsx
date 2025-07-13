@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "~/lib/auth";
 
 interface ManagedFile {
@@ -247,9 +248,9 @@ export function FilesTab() {
         <div className="space-y-4">
           {files.map((file) => (
             <div key={file.id} className="bg-white/10 rounded-lg p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-medium text-white mb-2">{file.filename}</h3>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex-1 mb-4 sm:mb-0">
+                  <h3 className="font-medium text-white mb-2 break-words">{file.filename}</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-white/70">
                     <div>
                       <span className="block">Size</span>
@@ -278,7 +279,8 @@ export function FilesTab() {
                   )}
                 </div>
                 
-                <div className="flex flex-col space-y-2 ml-4">
+                {/* Desktop buttons */}
+                <div className="hidden sm:flex flex-col space-y-2 ml-4">
                   <button
                     onClick={() => copyFileLink(file.transfer_id, file.filename)}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
@@ -300,6 +302,32 @@ export function FilesTab() {
                     Delete
                   </button>
                 </div>
+                
+                {/* Mobile buttons */}
+                <div className="sm:hidden ml-0">
+                  <div className="flex flex-row space-x-2">
+                    <button
+                      onClick={() => copyFileLink(file.transfer_id, file.filename)}
+                      className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition-colors"
+                    >
+                      Copy Link
+                    </button>
+                    {!file.is_expired && (
+                      <button
+                        onClick={() => openExtensionModal(file)}
+                        className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+                      >
+                        Extend
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteFile(file.id, file.filename)}
+                      className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
               </div>
               
               <div className="mt-4 pt-4 border-t border-white/10">
@@ -316,104 +344,228 @@ export function FilesTab() {
 
       {/* Extension Modal */}
       {showExtensionModal && selectedFileData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-white mb-4">
-              Extend File: {selectedFileData.filename}
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-white/70 mb-2">
-                  Extension Period
-                </label>
-                <div className="space-y-3">
-                  <div>
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        checked={!useCustomDays}
-                        onChange={() => setUseCustomDays(false)}
-                        className="text-blue-600"
-                      />
-                      <span className="text-white text-sm">Preset options</span>
-                    </label>
-                    {!useCustomDays && (
-                      <select
-                        value={extensionDays}
-                        onChange={(e) => setExtensionDays(parseInt(e.target.value))}
-                        className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-black"
-                      >
-                        <option value={1}>1 Day</option>
-                        <option value={3}>3 Days</option>
-                        <option value={7}>1 Week</option>
-                        <option value={14}>2 Weeks</option>
-                        <option value={30}>1 Month</option>
-                        <option value={90}>3 Months</option>
-                        <option value={180}>6 Months</option>
-                        <option value={365}>1 Year</option>
-                      </select>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        checked={useCustomDays}
-                        onChange={() => setUseCustomDays(true)}
-                        className="text-blue-600"
-                      />
-                      <span className="text-white text-sm">Custom days</span>
-                    </label>
-                    {useCustomDays && (
-                      <input
-                        type="number"
-                        min="1"
-                        max="365"
-                        value={customDays}
-                        onChange={(e) => setCustomDays(e.target.value)}
-                        placeholder="Enter number of days"
-                        className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50"
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className="text-sm text-white/70 space-y-1">
-                  <div>File size: {formatFileSize(selectedFileData.filesize)}</div>
-                  <div>Extension period: {useCustomDays ? (parseInt(customDays) || 0) : extensionDays} day(s)</div>
-                  <div className="font-medium text-white">
-                    Cost: ₦{formatCost(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
+        <>
+          {/* Desktop Modal */}
+          <div className="hidden sm:flex fixed inset-0 bg-black/50 items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+              <h3 className="text-lg font-semibold text-white mb-4">
+                Extend File: {selectedFileData.filename}
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-white/70 mb-2">
+                    Extension Period
+                  </label>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          checked={!useCustomDays}
+                          onChange={() => setUseCustomDays(false)}
+                          className="text-blue-600"
+                        />
+                        <span className="text-white text-sm">Preset options</span>
+                      </label>
+                      {!useCustomDays && (
+                        <select
+                          value={extensionDays}
+                          onChange={(e) => setExtensionDays(parseInt(e.target.value))}
+                          className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                        >
+                          <option value={1}>1 Day</option>
+                          <option value={3}>3 Days</option>
+                          <option value={7}>1 Week</option>
+                          <option value={14}>2 Weeks</option>
+                          <option value={30}>1 Month</option>
+                          <option value={90}>3 Months</option>
+                          <option value={180}>6 Months</option>
+                          <option value={365}>1 Year</option>
+                        </select>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          checked={useCustomDays}
+                          onChange={() => setUseCustomDays(true)}
+                          className="text-blue-600"
+                        />
+                        <span className="text-white text-sm">Custom days</span>
+                      </label>
+                      {useCustomDays && (
+                        <input
+                          type="number"
+                          min="1"
+                          max="365"
+                          value={customDays}
+                          onChange={(e) => setCustomDays(e.target.value)}
+                          placeholder="Enter number of days"
+                          className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50"
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    setShowExtensionModal(false);
-                    setSelectedFile(null);
-                    setCustomDays("");
-                    setUseCustomDays(false);
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleExtendFile(selectedFileData)}
-                  disabled={extendingFile === selectedFileData.id}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg transition-colors"
-                >
-                  {extendingFile === selectedFileData.id ? "Extending..." : "Extend File"}
-                </button>
+                
+                <div className="bg-white/5 rounded-lg p-4">
+                  <div className="text-sm text-white/70 space-y-1">
+                    <div>File size: {formatFileSize(selectedFileData.filesize)}</div>
+                    <div>Extension period: {useCustomDays ? (parseInt(customDays) || 0) : extensionDays} day(s)</div>
+                    <div className="font-medium text-white">
+                      Cost: ₦{formatCost(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowExtensionModal(false);
+                      setSelectedFile(null);
+                      setCustomDays("");
+                      setUseCustomDays(false);
+                    }}
+                    className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleExtendFile(selectedFileData)}
+                    disabled={extendingFile === selectedFileData.id}
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg transition-colors"
+                  >
+                    {extendingFile === selectedFileData.id ? "Extending..." : "Extend File"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Mobile Bottom Sheet Modal - Render via Portal */}
+          {typeof window !== "undefined" && createPortal(
+            <div className="sm:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-[999]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+              <div className="fixed bottom-0 left-0 right-0 bg-gray-800 rounded-t-3xl p-6 max-h-[80vh] overflow-y-auto" style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-white">
+                    Extend File
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowExtensionModal(false);
+                      setSelectedFile(null);
+                      setCustomDays("");
+                      setUseCustomDays(false);
+                    }}
+                    className="text-gray-400 hover:text-white p-2"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                
+                <div className="mb-4">
+                  <p className="text-white/70 text-sm break-words">{selectedFileData.filename}</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-white/70 mb-2">
+                      Extension Period
+                    </label>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            checked={!useCustomDays}
+                            onChange={() => setUseCustomDays(false)}
+                            className="text-blue-600"
+                          />
+                          <span className="text-white text-sm">Preset options</span>
+                        </label>
+                        {!useCustomDays && (
+                          <select
+                            value={extensionDays}
+                            onChange={(e) => setExtensionDays(parseInt(e.target.value))}
+                            className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                          >
+                            <option value={1}>1 Day</option>
+                            <option value={3}>3 Days</option>
+                            <option value={7}>1 Week</option>
+                            <option value={14}>2 Weeks</option>
+                            <option value={30}>1 Month</option>
+                            <option value={90}>3 Months</option>
+                            <option value={180}>6 Months</option>
+                            <option value={365}>1 Year</option>
+                          </select>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            checked={useCustomDays}
+                            onChange={() => setUseCustomDays(true)}
+                            className="text-blue-600"
+                          />
+                          <span className="text-white text-sm">Custom days</span>
+                        </label>
+                        {useCustomDays && (
+                          <input
+                            type="number"
+                            min="1"
+                            max="365"
+                            value={customDays}
+                            onChange={(e) => setCustomDays(e.target.value)}
+                            placeholder="Enter number of days"
+                            className="w-full mt-2 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white/5 rounded-lg p-4">
+                    <div className="text-sm text-white/70 space-y-1">
+                      <div>File size: {formatFileSize(selectedFileData.filesize)}</div>
+                      <div>Extension period: {useCustomDays ? (parseInt(customDays) || 0) : extensionDays} day(s)</div>
+                      <div className="font-medium text-white">
+                        Cost: ₦{formatCost(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex space-x-3 pb-6">
+                    <button
+                      onClick={() => {
+                        setShowExtensionModal(false);
+                        setSelectedFile(null);
+                        setCustomDays("");
+                        setUseCustomDays(false);
+                      }}
+                      className="flex-1 px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleExtendFile(selectedFileData)}
+                      disabled={extendingFile === selectedFileData.id}
+                      className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg transition-colors font-medium"
+                    >
+                      {extendingFile === selectedFileData.id ? "Extending..." : "Extend File"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+        </>
       )}
     </div>
   );
