@@ -816,7 +816,7 @@ app.get("/api/file/:transferId/:filename", async (c) => {
     
     // Get file details
     const file = await c.env.DB.prepare(`
-      SELECT * FROM files WHERE transfer_id = ? AND filename = ?
+      SELECT * FROM files WHERE transfer_id = ? AND filename = ? AND deletion_status = 'active'
     `).bind(transferId, filename).first();
     
     if (!file) {
@@ -852,11 +852,11 @@ app.get("/api/transfers/:transferId", async (c) => {
     const transferId = c.req.param('transferId');
     console.log("🔍 /api/transfers/:transferId called with ID:", transferId);
     
-    // Get transfer details
+    // Get transfer details (only if not expired)
     console.log("💾 Querying transfers table...");
     const transfer = await c.env.DB.prepare(`
-      SELECT * FROM transfers WHERE id = ?
-    `).bind(transferId).first<DatabaseTransfer>();
+      SELECT * FROM transfers WHERE id = ? AND expires_at > ?
+    `).bind(transferId, Date.now()).first<DatabaseTransfer>();
     console.log("📊 Transfer query result:", transfer ? "Found" : "Not found");
     
     if (!transfer) {
@@ -864,10 +864,10 @@ app.get("/api/transfers/:transferId", async (c) => {
       return c.json({ error: 'Transfer not found' }, 404);
     }
     
-    // Get files for this transfer
+    // Get files for this transfer (only active files)
     console.log("💾 Querying files for transfer...");
     const files = await c.env.DB.prepare(`
-      SELECT * FROM files WHERE transfer_id = ?
+      SELECT * FROM files WHERE transfer_id = ? AND deletion_status = 'active'
     `).bind(transferId).all<DatabaseFile>();
     console.log("📊 Files query result:", files.results?.length || 0, "files found");
     
@@ -1082,14 +1082,18 @@ app.get("/api/files", async (c) => {
     
     const userId = authHeader.slice(7);
     
-    // Get user's managed files
+    // Get user's managed files (only active, non-expired files)
     const files = await c.env.DB.prepare(`
       SELECT f.*, t.status as transfer_status, t.created_at as transfer_created_at
       FROM files f
       LEFT JOIN transfers t ON f.transfer_id = t.id
-      WHERE f.user_id = ? AND f.is_managed = 1
+      WHERE f.user_id = ? AND f.is_managed = 1 AND f.deletion_status = 'active'
+        AND (
+          (f.extended_until IS NOT NULL AND f.extended_until > ?) OR
+          (f.extended_until IS NULL AND (t.created_at + 86400000) > ?)
+        )
       ORDER BY f.created_at DESC
-    `).bind(userId).all<DatabaseFile>();
+    `).bind(userId, Date.now(), Date.now()).all<DatabaseFile>();
     
     return c.json({ 
       files: files.results?.map(file => ({
@@ -1231,7 +1235,7 @@ app.delete("/api/files/:fileId", async (c) => {
     
     // Get file details
     const file = await c.env.DB.prepare(`
-      SELECT * FROM files WHERE id = ? AND user_id = ? AND is_managed = 1
+      SELECT * FROM files WHERE id = ? AND user_id = ? AND is_managed = 1 AND deletion_status = 'active'
     `).bind(fileId, userId).first<DatabaseFile>();
     
     if (!file) {
@@ -1277,7 +1281,7 @@ app.get("/api/files/:fileId/extensions", async (c) => {
     
     // Verify file ownership
     const file = await c.env.DB.prepare(`
-      SELECT id FROM files WHERE id = ? AND user_id = ? AND is_managed = 1
+      SELECT id FROM files WHERE id = ? AND user_id = ? AND is_managed = 1 AND deletion_status = 'active'
     `).bind(fileId, userId).first();
     
     if (!file) {
@@ -1736,42 +1740,59 @@ export default {
         await cleanupIncompleteTransfer(env, transfer.id);
       }
       
-      // 3. Clean up expired managed files (user files that weren't extended)
-      const expiredManagedFiles = await env.DB.prepare(`
-        SELECT f.id, f.r2_object_key, f.filename, t.created_at as transfer_created_at
+      // 3. Mark expired managed files as 'expired' (don't delete yet)
+      const newlyExpiredFiles = await env.DB.prepare(`
+        SELECT f.id, f.filename
         FROM files f
         LEFT JOIN transfers t ON f.transfer_id = t.id
-        WHERE f.is_managed = 1 
+        WHERE f.is_managed = 1 AND f.deletion_status = 'active'
         AND (
           (f.extended_until IS NOT NULL AND f.extended_until < ?) OR
           (f.extended_until IS NULL AND (t.created_at + 86400000) < ?)
         )
       `).bind(now, now).all();
       
-      for (const file of expiredManagedFiles.results as Array<{ id: string, r2_object_key: string, filename: string }>) {
+      for (const file of newlyExpiredFiles.results as Array<{ id: string, filename: string }>) {
+        await env.DB.prepare(`
+          UPDATE files SET deletion_status = 'expired' WHERE id = ?
+        `).bind(file.id).run();
+        console.log(`Marked as expired: ${file.filename}`);
+      }
+      
+      // 4. Process files marked as 'expired' - check R2 and delete
+      const expiredFiles = await env.DB.prepare(`
+        SELECT f.id, f.r2_object_key, f.filename
+        FROM files f
+        WHERE f.deletion_status = 'expired'
+      `).bind().all();
+      
+      for (const file of expiredFiles.results as Array<{ id: string, r2_object_key: string, filename: string }>) {
         try {
-          // Delete file from R2
           if (file.r2_object_key) {
-            await env.FILE_BUCKET.delete(file.r2_object_key);
-            console.log(`Deleted expired managed file: ${file.filename}`);
+            // Check if file exists in R2
+            const exists = await env.FILE_BUCKET.head(file.r2_object_key);
+            if (exists) {
+              // File exists, delete it from R2
+              await env.FILE_BUCKET.delete(file.r2_object_key);
+              console.log(`Deleted from R2: ${file.filename}`);
+            } else {
+              console.log(`File not found in R2: ${file.filename}`);
+            }
           }
           
-          // Delete file extensions
+          // Mark file as deleted (don't remove from DB)
           await env.DB.prepare(`
-            DELETE FROM file_extensions WHERE file_id = ?
+            UPDATE files SET deletion_status = 'deleted' WHERE id = ?
           `).bind(file.id).run();
-          
-          // Delete file record
-          await env.DB.prepare(`
-            DELETE FROM files WHERE id = ?
-          `).bind(file.id).run();
+          console.log(`Marked as deleted: ${file.filename}`);
           
         } catch (error) {
-          console.error(`Error cleaning up expired managed file ${file.filename}:`, error);
+          console.error(`Error processing expired file ${file.filename}:`, error);
+          // File stays in 'expired' status for retry next time
         }
       }
       
-      console.log(`Cleaned up ${expiredTransfers.results.length} expired transfers, ${abandonedTransfers.results.length} abandoned transfers, and ${expiredManagedFiles.results.length} expired managed files`);
+      console.log(`Cleaned up ${expiredTransfers.results.length} expired transfers, ${abandonedTransfers.results.length} abandoned transfers, marked ${newlyExpiredFiles.results.length} files as expired, and processed ${expiredFiles.results.length} expired files`);
       
     } catch (error) {
       console.error('Error during cleanup:', error);

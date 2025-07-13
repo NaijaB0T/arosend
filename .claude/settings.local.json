@@ -9,7 +9,8 @@
       "Bash(npx tsc:*)",
       "Bash(sed:*)",
       "Bash(npx wrangler d1 execute:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(wrangler d1 execute:*)"
     ],
     "deny": []
   }
