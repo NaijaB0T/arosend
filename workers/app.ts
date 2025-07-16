@@ -1799,3 +1799,38 @@ export default {
     }
   }
 };
+
+// Test endpoint to check database schema
+app.get("/api/test/schema", async (c) => {
+  try {
+    // Check if extended_until column exists by querying the schema
+    const schema = await c.env.DB.prepare(`
+      PRAGMA table_info(files)
+    `).all();
+    
+    const columns = schema.results?.map((col: any) => ({
+      name: col.name,
+      type: col.type,
+      notnull: col.notnull,
+      dflt_value: col.dflt_value
+    })) || [];
+    
+    const hasExtendedUntil = columns.some(col => col.name === 'extended_until');
+    
+    // Also check sample file data to see what columns are actually populated
+    const sampleFile = await c.env.DB.prepare(`
+      SELECT * FROM files LIMIT 1
+    `).first();
+    
+    return c.json({
+      has_extended_until_column: hasExtendedUntil,
+      all_columns: columns,
+      sample_file: sampleFile,
+      extended_until_in_sample: sampleFile && 'extended_until' in sampleFile
+    });
+    
+  } catch (error) {
+    console.error('Schema check error:', error);
+    return c.json({ error: 'Schema check failed', details: error.message }, 500);
+  }
+});
