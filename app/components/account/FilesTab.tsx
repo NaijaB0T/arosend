@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "~/lib/auth";
+import { formatNGNWithUSD, formatNGNWithUSDFixed } from '../../lib/currency';
 
 interface ManagedFile {
   id: string;
@@ -274,7 +275,7 @@ export function FilesTab() {
                   
                   {file.total_extension_cost > 0 && (
                     <div className="mt-2 text-sm text-white/60">
-                      Total spent on extensions: ₦{formatCost(file.total_extension_cost)}
+                      Total spent on extensions: {formatNGNWithUSDFixed(file.total_extension_cost)}
                     </div>
                   )}
                 </div>
@@ -332,7 +333,7 @@ export function FilesTab() {
               
               <div className="mt-4 pt-4 border-t border-white/10">
                 <div className="text-sm text-white/70">
-                  <span>Extension cost: ₦{formatCost(calculateExtensionCost(file, 1))}/day</span>
+                  <span>Extension cost: {formatNGNWithUSDFixed(calculateExtensionCost(file, 1))}/day</span>
                   <span className="mx-2">•</span>
                   <span>Upload date: {formatDate(file.created_at)}</span>
                 </div>
@@ -415,7 +416,7 @@ export function FilesTab() {
                     <div>File size: {formatFileSize(selectedFileData.filesize)}</div>
                     <div>Extension period: {useCustomDays ? (parseInt(customDays) || 0) : extensionDays} day(s)</div>
                     <div className="font-medium text-white">
-                      Cost: ₦{formatCost(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
+                      Cost: {formatNGNWithUSDFixed(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
                     </div>
                   </div>
                 </div>
@@ -535,7 +536,7 @@ export function FilesTab() {
                       <div>File size: {formatFileSize(selectedFileData.filesize)}</div>
                       <div>Extension period: {useCustomDays ? (parseInt(customDays) || 0) : extensionDays} day(s)</div>
                       <div className="font-medium text-white">
-                        Cost: ₦{formatCost(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
+                        Cost: {formatNGNWithUSDFixed(calculateExtensionCost(selectedFileData, useCustomDays ? parseInt(customDays) || 0 : extensionDays))}
                       </div>
                     </div>
                   </div>

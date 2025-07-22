@@ -21,7 +21,7 @@ export default function Help() {
     },
     {
       question: "How does the pricing work?",
-      answer: "We offer pay-as-you-use pricing. Free transfers expire in 24 hours. For longer storage, pay ₦60/month per GB or ₦2/day as you use."
+      answer: "We offer pay-as-you-use pricing. Free transfers expire in 24 hours. For longer storage, pay ₦60 ($0.04)/month per GB or ₦2 ($0.001)/day as you use."
     },
     {
       question: "Are my files secure?",

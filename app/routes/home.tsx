@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Arosend - Secure File Transfer and Storage" },
-    { name: "description", content: "Send large files securely with pay-as-you-use storage from ₦60/month or ₦2/day. Free transfers included!" },
+    { name: "description", content: "Send large files securely with pay-as-you-use storage from ₦60 ($0.04)/month or ₦2 ($0.001)/day. Free transfers included!" },
   ];
 }
 
@@ -105,8 +105,8 @@ export default function Home() {
               {/* Pricing highlight */}
               <div className="bg-black bg-opacity-80 backdrop-blur-sm rounded-xl p-3 md:p-4 mb-4 md:mb-6 border border-gray-600">
                 <div className="text-center">
-                  <div className="text-lg md:text-xl lg:text-2xl font-bold text-white mb-1 md:mb-2">Store 1GB for ₦60/month</div>
-                  <div className="text-xs md:text-sm text-gray-300 font-light">Or pay ₦2 per day as you use</div>
+                  <div className="text-lg md:text-xl lg:text-2xl font-bold text-white mb-1 md:mb-2">Store 1GB for ₦60 ($0.04)/month</div>
+                  <div className="text-xs md:text-sm text-gray-300 font-light">Or pay ₦2 ($0.001) per day as you use</div>
                 </div>
               </div>
               

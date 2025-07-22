@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from '~/components/Header';
 import { ThreeBackground } from '~/components/ThreeBackground';
+import { toUSD } from '../lib/currency';
 
 export default function Pricing() {
   const [fileSize, setFileSize] = useState<string>('1');
@@ -42,11 +43,13 @@ export default function Pricing() {
   };
 
   const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-NG', {
+    const usdAmount = toUSD(amount);
+    const ngnFormatted = new Intl.NumberFormat('en-NG', {
       style: 'currency',
       currency: 'NGN',
       minimumFractionDigits: 0
     }).format(amount);
+    return `${ngnFormatted} ($${usdAmount.toFixed(2)})`;
   };
 
   const commonFileSizes = [
@@ -82,7 +85,7 @@ export default function Pricing() {
           </p>
           <div className="bg-green-600/10 border border-green-600/20 rounded-lg p-4 max-w-md mx-auto">
             <p className="text-green-400 font-medium">
-              ₦2 per GB per day
+              ₦2 ($0.001) per GB per day
             </p>
             <p className="text-green-300/80 text-sm">
               Pay only for what you store
@@ -217,7 +220,7 @@ export default function Pricing() {
           <div className="space-y-6">
             <div>
               <h3 className="text-lg font-semibold mb-2">How is pricing calculated?</h3>
-              <p className="text-gray-400">We charge ₦2 per GB per day. If you store a 5GB file for 7 days, the cost would be 5 × 7 × ₦2 = ₦70.</p>
+              <p className="text-gray-400">We charge ₦2 ($0.001) per GB per day. If you store a 5GB file for 7 days, the cost would be 5 × 7 × ₦2 = ₦70 ($0.04).</p>
             </div>
             
             <div>

@@ -8,6 +8,7 @@ import { useAuth } from "../lib/auth";
 import { ExpiryWarningModal } from "../components/ExpiryWarningModal";
 import { ExtendExpiryConfirmationModal } from "../components/ExtendExpiryConfirmationModal";
 import { DeletionWarningModal } from "../components/DeletionWarningModal";
+import { formatNGNWithUSD, formatNGNWithUSDFixed } from "../lib/currency";
 
 export function meta({ params }: Route.MetaArgs) {
   return [
@@ -698,7 +699,7 @@ export default function FilePage() {
                               {creditsLoading ? (
                                 <span className="text-white/60">Loading...</span>
                               ) : (
-                                <span className="text-green-400 font-medium">₦{credits.toLocaleString()} available</span>
+                                <span className="text-green-400 font-medium">{formatNGNWithUSD(credits)} available</span>
                               )}
                             </div>
                           </div>
@@ -708,7 +709,7 @@ export default function FilePage() {
                           <div className="flex justify-between items-center">
                             <span className="text-white">Cost in Credits:</span>
                             <span className="text-2xl font-bold text-green-400">
-                              ₦{formatCost(calculateExtensionCost())}
+                              {formatNGNWithUSDFixed(calculateExtensionCost())}
                             </span>
                           </div>
                           <p className="text-white/60 text-sm mt-1">
@@ -716,7 +717,7 @@ export default function FilePage() {
                           </p>
                           {!creditsLoading && credits < calculateExtensionCost() && (
                             <p className="text-red-400 text-sm mt-2">
-                              Insufficient credits. You need ₦{formatCost(calculateExtensionCost() - credits)} more.
+                              Insufficient credits. You need {formatNGNWithUSDFixed(calculateExtensionCost() - credits)} more.
                             </p>
                           )}
                         </div>
@@ -775,7 +776,7 @@ export default function FilePage() {
                           <div className="flex justify-between items-center">
                             <span className="text-white">Total Cost:</span>
                             <span className="text-2xl font-bold text-green-400">
-                              ₦{getGuestCost().toLocaleString()}
+                              {formatNGNWithUSD(getGuestCost())}
                             </span>
                           </div>
                           
@@ -788,11 +789,11 @@ export default function FilePage() {
                                 <div className="mt-3 space-y-1">
                                   <div className="flex justify-between text-sm text-white/80">
                                     <span>Base cost ({calculateMinimumDaysForGuests()} days):</span>
-                                    <span>₦{breakdown.baseCost.toLocaleString()}</span>
+                                    <span>{formatNGNWithUSD(breakdown.baseCost)}</span>
                                   </div>
                                   <div className="flex justify-between text-sm text-white/80">
                                     <span>Extra cost ({breakdown.excessDays} additional days):</span>
-                                    <span>₦{breakdown.excessCost.toLocaleString()}</span>
+                                    <span>{formatNGNWithUSD(breakdown.excessCost)}</span>
                                   </div>
                                   <div className="border-t border-white/20 pt-1"></div>
                                 </div>
@@ -884,7 +885,7 @@ export default function FilePage() {
                                 {creditsLoading ? (
                                   <span className="text-white/60">Loading...</span>
                                 ) : (
-                                  <span className="text-green-400 font-medium">₦{credits.toLocaleString()} available</span>
+                                  <span className="text-green-400 font-medium">{formatNGNWithUSD(credits)} available</span>
                                 )}
                               </div>
                             </div>
@@ -894,7 +895,7 @@ export default function FilePage() {
                             <div className="flex justify-between items-center">
                               <span className="text-white">Cost in Credits:</span>
                               <span className="text-2xl font-bold text-green-400">
-                                ₦{formatCost(calculateExtensionCost())}
+                                {formatNGNWithUSDFixed(calculateExtensionCost())}
                               </span>
                             </div>
                             <p className="text-white/60 text-sm mt-1">
@@ -902,7 +903,7 @@ export default function FilePage() {
                             </p>
                             {!creditsLoading && credits < calculateExtensionCost() && (
                               <p className="text-red-400 text-sm mt-2">
-                                Insufficient credits. You need ₦{formatCost(calculateExtensionCost() - credits)} more.
+                                Insufficient credits. You need {formatNGNWithUSDFixed(calculateExtensionCost() - credits)} more.
                               </p>
                             )}
                           </div>
@@ -961,7 +962,7 @@ export default function FilePage() {
                             <div className="flex justify-between items-center">
                               <span className="text-white">Total Cost:</span>
                               <span className="text-2xl font-bold text-green-400">
-                                ₦{getGuestCost().toLocaleString()}
+                                {formatNGNWithUSD(getGuestCost())}
                               </span>
                             </div>
                             
@@ -974,11 +975,11 @@ export default function FilePage() {
                                   <div className="mt-3 space-y-1">
                                     <div className="flex justify-between text-sm text-white/80">
                                       <span>Base cost ({calculateMinimumDaysForGuests()} days):</span>
-                                      <span>₦{breakdown.baseCost.toLocaleString()}</span>
+                                      <span>{formatNGNWithUSD(breakdown.baseCost)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm text-white/80">
                                       <span>Extra cost ({breakdown.excessDays} additional days):</span>
-                                      <span>₦{breakdown.excessCost.toLocaleString()}</span>
+                                      <span>{formatNGNWithUSD(breakdown.excessCost)}</span>
                                     </div>
                                     <div className="border-t border-white/20 pt-1"></div>
                                   </div>
@@ -1037,21 +1038,21 @@ export default function FilePage() {
                 <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 md:p-8 border border-white/20 max-w-md w-full">
                   <h3 className="text-xl font-bold text-white mb-4">Add Credits</h3>
                   <p className="text-white/70 mb-6">
-                    You need ₦{formatCost(calculateExtensionCost())} credits to extend this transfer, but you only have ₦{credits.toLocaleString()}.
+                    You need {formatNGNWithUSDFixed(calculateExtensionCost())} credits to extend this transfer, but you only have {formatNGNWithUSD(credits)}.
                   </p>
                   
                   <div className="space-y-3 mb-6">
                     <div className="flex justify-between text-white">
                       <span>Required:</span>
-                      <span className="font-medium">₦{formatCost(calculateExtensionCost())}</span>
+                      <span className="font-medium">{formatNGNWithUSDFixed(calculateExtensionCost())}</span>
                     </div>
                     <div className="flex justify-between text-white">
                       <span>Available:</span>
-                      <span className="font-medium">₦{credits.toLocaleString()}</span>
+                      <span className="font-medium">{formatNGNWithUSD(credits)}</span>
                     </div>
                     <div className="border-t border-white/20 pt-3 flex justify-between text-white">
                       <span>Minimum needed:</span>
-                      <span className="font-bold text-red-400">₦{formatCost(calculateExtensionCost() - credits)}</span>
+                      <span className="font-bold text-red-400">{formatNGNWithUSDFixed(calculateExtensionCost() - credits)}</span>
                     </div>
                   </div>
 
@@ -1074,17 +1075,17 @@ export default function FilePage() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center text-sm text-white/80">
                         <span>Credits to receive:</span>
-                        <span>₦{creditAmount.toLocaleString()}</span>
+                        <span>{formatNGNWithUSD(creditAmount)}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm text-white/80">
                         <span>Transaction fee (5%):</span>
-                        <span>₦{calculateTransactionFee(creditAmount).toLocaleString()}</span>
+                        <span>{formatNGNWithUSD(calculateTransactionFee(creditAmount))}</span>
                       </div>
                       <div className="border-t border-white/20 pt-2">
                         <div className="flex justify-between items-center">
                           <span className="text-white font-medium">Total Payment:</span>
                           <span className="text-2xl font-bold text-green-400">
-                            ₦{calculateTotalWithFee(creditAmount).toLocaleString()}
+                            {formatNGNWithUSD(calculateTotalWithFee(creditAmount))}
                           </span>
                         </div>
                       </div>

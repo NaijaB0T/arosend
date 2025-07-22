@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "~/lib/auth";
 import { useSearchParams } from "react-router";
+import { formatNGNWithUSD, formatNGNWithUSDFixed } from '../../lib/currency';
 
 interface PaystackResponse {
   status: boolean;
@@ -252,7 +253,7 @@ export function CreditsTab() {
                 onClick={() => setAmount(preset.toString())}
                 className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
               >
-                ₦{preset.toLocaleString()}
+                {formatNGNWithUSD(preset)}
               </button>
             ))}
           </div>
@@ -281,16 +282,16 @@ export function CreditsTab() {
             <div className="space-y-1 text-sm">
               <div className="flex justify-between text-white/80">
                 <span>Credits to receive:</span>
-                <span>₦{parseFloat(amount).toLocaleString()}</span>
+                <span>{formatNGNWithUSD(parseFloat(amount))}</span>
               </div>
               <div className="flex justify-between text-white/80">
                 <span>Transaction fee (5%):</span>
-                <span>₦{calculateTransactionFee(parseFloat(amount)).toLocaleString()}</span>
+                <span>{formatNGNWithUSD(calculateTransactionFee(parseFloat(amount)))}</span>
               </div>
               <div className="border-t border-white/20 pt-1 mt-2">
                 <div className="flex justify-between font-medium">
                   <span>Total payment:</span>
-                  <span className="text-green-400">₦{calculateTotalWithFee(parseFloat(amount)).toLocaleString()}</span>
+                  <span className="text-green-400">{formatNGNWithUSD(calculateTotalWithFee(parseFloat(amount)))}</span>
                 </div>
               </div>
             </div>
@@ -353,7 +354,7 @@ export function CreditsTab() {
                     {transaction.type === 'credit' ? '+' : '-'}{transaction.credits} credits
                   </p>
                   <p className="text-white/60 text-sm">
-                    ₦{(transaction.amount / 100).toLocaleString()}
+                    {formatNGNWithUSD(transaction.amount / 100)}
                   </p>
                 </div>
               </div>

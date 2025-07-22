@@ -22,7 +22,7 @@ export default function Features() {
       icon: "💰",
       title: "Pay-as-You-Use Storage",
       description: "Only pay for what you store. No monthly commitments or hidden fees.",
-      details: ["₦60/month per GB", "₦2/day flexible pricing", "No setup costs"]
+      details: ["₦60 ($0.04)/month per GB", "₦2 ($0.001)/day flexible pricing", "No setup costs"]
     },
     {
       icon: "⏱️",

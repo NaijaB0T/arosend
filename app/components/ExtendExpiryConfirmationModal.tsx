@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { formatNGNWithUSD, formatNGNWithUSDFixed, toUSD } from '../lib/currency';
 
 interface ExtendExpiryConfirmationModalProps {
   isOpen: boolean;
@@ -187,12 +188,12 @@ export function ExtendExpiryConfirmationModal({
               {isAuthenticated ? (
                 <div className="flex justify-between items-center">
                   <span className="text-white/70">Rate:</span>
-                  <span className="text-white">₦{BASE_RATE} per GB per day</span>
+                  <span className="text-white">₦{BASE_RATE} (${toUSD(BASE_RATE).toFixed(3)}) per GB per day</span>
                 </div>
               ) : (
                 <div className="flex justify-between items-center">
                   <span className="text-white/70">Rate:</span>
-                  <span className="text-white">₦{BASE_RATE} per GB per day • Minimum ₦100</span>
+                  <span className="text-white">₦{BASE_RATE} (${toUSD(BASE_RATE).toFixed(3)}) per GB per day • Minimum {formatNGNWithUSDFixed(100)}</span>
                 </div>
               )}
               
@@ -205,11 +206,11 @@ export function ExtendExpiryConfirmationModal({
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm text-white/80">
                         <span>Base cost ({calculateMinimumDaysForGuests()} days):</span>
-                        <span>₦{breakdown.baseCost.toLocaleString()}</span>
+                        <span>{formatNGNWithUSD(breakdown.baseCost)}</span>
                       </div>
                       <div className="flex justify-between text-sm text-white/80">
                         <span>Extra cost ({breakdown.excessDays} additional days):</span>
-                        <span>₦{breakdown.excessCost.toLocaleString()}</span>
+                        <span>{formatNGNWithUSD(breakdown.excessCost)}</span>
                       </div>
                     </div>
                   );
@@ -224,7 +225,7 @@ export function ExtendExpiryConfirmationModal({
                       <span className="text-white font-medium">Cost in Credits:</span>
                       <div className="text-right">
                         <div className="text-2xl font-bold text-green-400">
-                          ₦{priceNGN.toFixed(2)}
+                          {formatNGNWithUSDFixed(priceNGN)}
                         </div>
                       </div>
                     </div>
@@ -233,7 +234,7 @@ export function ExtendExpiryConfirmationModal({
                     </p>
                     {!creditsLoading && credits < priceNGN && (
                       <p className="text-red-400 text-sm mt-2">
-                        Insufficient credits. You need ₦{(priceNGN - credits).toFixed(2)} more.
+                        Insufficient credits. You need {formatNGNWithUSDFixed(priceNGN - credits)} more.
                       </p>
                     )}
                   </div>
@@ -242,7 +243,7 @@ export function ExtendExpiryConfirmationModal({
                     <span className="text-white font-medium">Total Price:</span>
                     <div className="text-right">
                       <div className="text-2xl font-bold text-green-400">
-                        ₦{priceNGN.toFixed(2)} (${priceUSD.toFixed(2)})
+                        {formatNGNWithUSDFixed(priceNGN)}
                       </div>
                     </div>
                   </div>
@@ -269,7 +270,7 @@ export function ExtendExpiryConfirmationModal({
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-white/70">Your Credits:</span>
                     <span className={creditsLoading ? 'text-white/60' : 'text-green-400 font-medium'}>
-                      {creditsLoading ? 'Loading...' : `₦${credits.toLocaleString()} available`}
+                      {creditsLoading ? 'Loading...' : `${formatNGNWithUSD(credits)} available`}
                     </span>
                   </div>
                 </div>
