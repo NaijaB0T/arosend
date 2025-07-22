@@ -11,7 +11,8 @@
       "Bash(npx wrangler d1 execute:*)",
       "Bash(grep:*)",
       "Bash(wrangler d1 execute:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm run lint)"
     ],
     "deny": []
   }

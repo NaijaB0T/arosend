@@ -5,6 +5,9 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "react-router";
 import { useAuth } from "../lib/auth";
+import { ExpiryWarningModal } from "../components/ExpiryWarningModal";
+import { ExtendExpiryConfirmationModal } from "../components/ExtendExpiryConfirmationModal";
+import { DeletionWarningModal } from "../components/DeletionWarningModal";
 
 export function meta({ params }: Route.MetaArgs) {
   return [
@@ -48,12 +51,34 @@ export default function FilePage() {
   // Credits modal state
   const [creditAmount, setCreditAmount] = useState(0);
   const [creditPaymentLoading, setCreditPaymentLoading] = useState(false);
+  
+  // New expiry notification modals state
+  const [showExpiryWarning, setShowExpiryWarning] = useState(false);
+  const [showExtendConfirmation, setShowExtendConfirmation] = useState(false);
+  const [showDeletionWarning, setShowDeletionWarning] = useState(false);
+  const [hasShownExpiryWarning, setHasShownExpiryWarning] = useState(false);
+  const [copiedFileLinks, setCopiedFileLinks] = useState<{[key: string]: boolean}>({});
 
   const [downloadUrl, setDownloadUrl] = useState(`/file/${transferId}`);
 
   useEffect(() => {
     fetchTransfer();
   }, [transferId]);
+
+  // Check for expiry warning when transfer data loads
+  useEffect(() => {
+    if (transfer && !hasShownExpiryWarning) {
+      const now = Date.now();
+      const timeRemaining = transfer.expires_at - now;
+      const hoursRemaining = timeRemaining / (1000 * 60 * 60);
+      
+      // Show warning if less than 48 hours remaining
+      if (hoursRemaining > 0 && hoursRemaining < 48) {
+        setShowExpiryWarning(true);
+        setHasShownExpiryWarning(true);
+      }
+    }
+  }, [transfer, hasShownExpiryWarning]);
 
   useEffect(() => {
     // Check for payment success in URL params and refresh credits
@@ -156,6 +181,29 @@ export default function FilePage() {
     }
   };
 
+  const copyFileLink = async (fileId: string, filename: string) => {
+    const fileUrl = `${window.location.origin}/api/file/${transferId}/${encodeURIComponent(filename)}`;
+    try {
+      await navigator.clipboard.writeText(fileUrl);
+      setCopiedFileLinks(prev => ({ ...prev, [fileId]: true }));
+      setTimeout(() => {
+        setCopiedFileLinks(prev => ({ ...prev, [fileId]: false }));
+      }, 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = fileUrl;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopiedFileLinks(prev => ({ ...prev, [fileId]: true }));
+      setTimeout(() => {
+        setCopiedFileLinks(prev => ({ ...prev, [fileId]: false }));
+      }, 2000);
+    }
+  };
+
   const calculateExtensionCost = () => {
     if (!transfer) return 0;
     const totalSizeGB = transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024);
@@ -247,6 +295,43 @@ export default function FilePage() {
         excessDays,
         total: Math.ceil(100 + excessCost)
       };
+    }
+  };
+
+  // Handle expiry warning modal actions
+  const handleExpiryExtend = () => {
+    setShowExpiryWarning(false);
+    setShowExtendConfirmation(true);
+  };
+
+  const handleExpiryIgnore = () => {
+    setShowExpiryWarning(false);
+    setShowDeletionWarning(true);
+  };
+
+  const handleDeletionContinue = () => {
+    setShowDeletionWarning(false);
+    // User acknowledges deletion warning, close modal
+  };
+
+  const handleDeletionExtend = () => {
+    setShowDeletionWarning(false);
+    setShowExtendConfirmation(true);
+  };
+
+  const handleExtendConfirmationClose = () => {
+    setShowExtendConfirmation(false);
+  };
+
+  const handleProceedToPayment = (days: number) => {
+    setExtensionDays(days);
+    setShowExtendConfirmation(false);
+    if (isAuthenticated) {
+      // If authenticated, try to extend with credits first
+      extendTransferWithCredits();
+    } else {
+      // If guest, show existing extension modal
+      setShowExtension(true);
     }
   };
 
@@ -483,7 +568,7 @@ export default function FilePage() {
                 </button>
               </div>
 
-              {/* Download Link */}
+              {/* Shareable Link */}
               <div className="mb-6">
                 <label className="block text-white font-medium mb-2">Share this link:</label>
                 <div className="flex flex-col md:flex-row gap-3">
@@ -506,34 +591,59 @@ export default function FilePage() {
                 </div>
               </div>
 
-              {/* Files List */}
-              <div>
-                <h3 className="text-white font-medium mb-4">Files ({transfer.files.length})</h3>
-                <div className="space-y-3">
-                  {transfer.files.map((file) => (
-                    <div key={file.id} className="bg-white/5 rounded-lg p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center mb-3 sm:mb-0">
-                          <div className="text-2xl mr-3">📁</div>
-                          <div>
-                            <p className="text-white font-medium break-words">{file.filename}</p>
-                            <p className="text-white/60 text-sm">{formatFileSize(file.size)}</p>
+              {/* Direct Download Links */}
+              {transfer.files.length > 0 && (
+                <div className="mb-6">
+                  <label className="block text-white font-medium mb-2">Direct download links:</label>
+                  <div className="space-y-4">
+                    {transfer.files.map((file) => {
+                      const fileDownloadUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/file/${transfer.id}/${encodeURIComponent(file.filename)}`;
+                      
+                      return (
+                        <div key={file.id} className="bg-white/5 rounded-lg p-4">
+                          {/* File Info */}
+                          <div className="flex items-center mb-3">
+                            <div className="text-xl mr-3">📁</div>
+                            <div>
+                              <p className="text-white font-medium">{file.filename}</p>
+                              <p className="text-white/60 text-sm">{formatFileSize(file.size)}</p>
+                            </div>
+                          </div>
+                          
+                          {/* Download Link Input */}
+                          <div className="flex flex-col md:flex-row gap-3">
+                            <input
+                              type="text"
+                              value={fileDownloadUrl}
+                              readOnly
+                              onClick={() => {
+                                // Make the input clickable to download
+                                const link = document.createElement('a');
+                                link.href = fileDownloadUrl;
+                                link.download = file.filename;
+                                link.click();
+                              }}
+                              className="flex-1 bg-green-900/20 border border-green-500/30 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500 cursor-pointer hover:bg-green-800/30 transition-colors"
+                              title="Click to download"
+                            />
+                            <button
+                              onClick={() => copyFileLink(file.id, file.filename)}
+                              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                                copiedFileLinks[file.id]
+                                  ? 'bg-green-600 text-white' 
+                                  : 'bg-white/10 text-white hover:bg-white/20'
+                              }`}
+                            >
+                              {copiedFileLinks[file.id] ? 'Copied!' : 'Copy Link'}
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center">
-                          <a 
-                            href={`/api/file/${transfer.id}/${encodeURIComponent(file.filename)}`}
-                            download={file.filename}
-                            className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium text-center"
-                          >
-                            Ready to download
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
+
             </div>
 
             {/* Extension Modal - Desktop */}
@@ -994,6 +1104,29 @@ export default function FilePage() {
                 </div>
               </div>
             )}
+
+            {/* New Expiry Notification Modals */}
+            <ExpiryWarningModal
+              isOpen={showExpiryWarning}
+              expiresAt={transfer?.expires_at || 0}
+              onExtend={handleExpiryExtend}
+              onIgnore={handleExpiryIgnore}
+            />
+
+            <ExtendExpiryConfirmationModal
+              isOpen={showExtendConfirmation}
+              onClose={handleExtendConfirmationClose}
+              onProceedToPayment={handleProceedToPayment}
+              fileSizeGB={transfer ? transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024) : 0}
+              isAuthenticated={isAuthenticated}
+            />
+
+            <DeletionWarningModal
+              isOpen={showDeletionWarning}
+              expiresAt={transfer?.expires_at || 0}
+              onContinue={handleDeletionContinue}
+              onExtend={handleDeletionExtend}
+            />
 
           </div>
         </div>
