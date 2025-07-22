@@ -107,6 +107,13 @@ export default function FilePage() {
   }, [showExtension, isAuthenticated]);
 
   useEffect(() => {
+    // Fetch credits when extend confirmation modal is shown for authenticated users
+    if (showExtendConfirmation && isAuthenticated) {
+      fetchCredits();
+    }
+  }, [showExtendConfirmation, isAuthenticated]);
+
+  useEffect(() => {
     // Set minimum credit amount when modal opens
     if (showCreditsModal) {
       const requiredCredits = calculateExtensionCost();
@@ -1121,6 +1128,8 @@ export default function FilePage() {
               onProceedToPayment={handleProceedToPayment}
               fileSizeGB={transfer ? transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024) : 0}
               isAuthenticated={isAuthenticated}
+              credits={credits}
+              creditsLoading={creditsLoading}
             />
 
             <DeletionWarningModal

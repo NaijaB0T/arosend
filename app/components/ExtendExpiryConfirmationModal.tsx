@@ -7,6 +7,8 @@ interface ExtendExpiryConfirmationModalProps {
   onProceedToPayment: (days: number) => void;
   fileSizeGB: number;
   isAuthenticated: boolean;
+  credits?: number;
+  creditsLoading?: boolean;
 }
 
 export function ExtendExpiryConfirmationModal({ 
@@ -14,7 +16,9 @@ export function ExtendExpiryConfirmationModal({
   onClose, 
   onProceedToPayment, 
   fileSizeGB,
-  isAuthenticated 
+  isAuthenticated,
+  credits = 0,
+  creditsLoading = false
 }: ExtendExpiryConfirmationModalProps) {
   const [days, setDays] = useState(5);
   const [priceNGN, setPriceNGN] = useState(0);
@@ -214,14 +218,35 @@ export function ExtendExpiryConfirmationModal({
               })()}
               
               <div className="border-t border-white/20 pt-3 mt-4">
-                <div className="flex justify-between items-center text-lg">
-                  <span className="text-white font-medium">Total Price:</span>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-green-400">
-                      ₦{priceNGN.toFixed(2)} (${priceUSD.toFixed(2)})
+                {isAuthenticated ? (
+                  <div>
+                    <div className="flex justify-between items-center text-lg">
+                      <span className="text-white font-medium">Cost in Credits:</span>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-green-400">
+                          ₦{priceNGN.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-white/60 text-sm mt-2">
+                      ₦2 per GB per day • Deducted from your credit balance
+                    </p>
+                    {!creditsLoading && credits < priceNGN && (
+                      <p className="text-red-400 text-sm mt-2">
+                        Insufficient credits. You need ₦{(priceNGN - credits).toFixed(2)} more.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center text-lg">
+                    <span className="text-white font-medium">Total Price:</span>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-green-400">
+                        ₦{priceNGN.toFixed(2)} (${priceUSD.toFixed(2)})
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
               
               {!isAuthenticated && days === calculateMinimumDaysForGuests() && (
@@ -238,6 +263,17 @@ export function ExtendExpiryConfirmationModal({
                   </p>
                 );
               })()}
+              
+              {isAuthenticated && (
+                <div className="mt-3">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-white/70">Your Credits:</span>
+                    <span className={creditsLoading ? 'text-white/60' : 'text-green-400 font-medium'}>
+                      {creditsLoading ? 'Loading...' : `₦${credits.toLocaleString()} available`}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -251,9 +287,10 @@ export function ExtendExpiryConfirmationModal({
             </button>
             <button
               onClick={handleProceed}
-              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium"
+              disabled={isAuthenticated && (!creditsLoading && credits < priceNGN)}
+              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Proceed to Payment
+              {isAuthenticated ? 'Extend with Credits' : 'Proceed to Payment'}
             </button>
           </div>
         </div>
