@@ -204,10 +204,11 @@ export default function FilePage() {
     }
   };
 
-  const calculateExtensionCost = () => {
+  const calculateExtensionCost = (daysOverride?: number) => {
     if (!transfer) return 0;
     const totalSizeGB = transfer.files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024 * 1024);
-    return totalSizeGB * extensionDays * 2; // ₦2 per GB per day - precise calculation
+    const days = daysOverride ?? extensionDays;
+    return totalSizeGB * days * 2; // ₦2 per GB per day - precise calculation
   };
 
   const formatCost = (cost: number): string => {
@@ -328,7 +329,7 @@ export default function FilePage() {
     setShowExtendConfirmation(false);
     if (isAuthenticated) {
       // If authenticated, try to extend with credits first
-      extendTransferWithCredits();
+      extendTransferWithCredits(days); // Pass days directly to avoid race condition
     } else {
       // If guest, show existing extension modal
       setShowExtension(true);
@@ -381,10 +382,11 @@ export default function FilePage() {
     return amount + calculateTransactionFee(amount);
   };
 
-  const extendTransferWithCredits = async () => {
+  const extendTransferWithCredits = async (daysOverride?: number) => {
     if (!transfer || !user) return;
     
-    const cost = calculateExtensionCost(); // Use precise cost for credit calculation
+    const days = daysOverride ?? extensionDays;
+    const cost = calculateExtensionCost(days); // Use precise cost for credit calculation
     if (credits < cost) {
       setShowCreditsModal(true);
       return;
@@ -400,7 +402,7 @@ export default function FilePage() {
         },
         body: JSON.stringify({
           transferId,
-          days: extensionDays
+          days: days
         })
       });
 
