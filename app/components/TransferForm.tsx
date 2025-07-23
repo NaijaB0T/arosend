@@ -64,7 +64,7 @@ class NetworkAdapter {
     }
   }
   
-  getAdaptiveChunkSize(fileSize: number): number {
+  getAdaptiveChunkSize(fileSize: number, partNumber?: number): number {
     const MB = 1024 * 1024;
     const GB = 1024 * MB;
     
@@ -84,6 +84,12 @@ class NetworkAdapter {
       baseChunkSize = 25 * MB; // Large chunks for very big files
     }
     
+    // Use smaller chunks for initial network testing (first 3 chunks)
+    if (partNumber && partNumber <= 3) {
+      baseChunkSize = Math.max(5 * MB, Math.min(baseChunkSize, 5 * MB)); // Start with 5MB for testing
+      console.log(`🧪 Using test chunk size ${this.formatBytes(baseChunkSize)} for part ${partNumber}`);
+    }
+    
     let speedMultiplier = 1;
     switch (this.connectionQuality) {
       case 'excellent': speedMultiplier = 1.8; break;
@@ -97,6 +103,14 @@ class NetworkAdapter {
     // Ensure we never go below 5MB for multipart uploads (R2 requirement)
     // and never above 50MB for efficiency
     return Math.max(5 * MB, Math.min(50 * MB, adaptiveChunkSize));
+  }
+  
+  formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
   
   getAdaptiveConcurrency(fileSize: number, totalChunks: number, isDevelopment: boolean): number {
@@ -146,12 +160,38 @@ class NetworkAdapter {
       case 'poor': qualityMultiplier = 1.5; break; // Reduced from 2.0 for faster recovery
       case 'unstable': qualityMultiplier = 3.0; break; // Reduced from 4.0
     }
-    // Cap maximum retry delay at 30 seconds for better UX
-    const delay = baseDelay * Math.pow(2, retryCount) * qualityMultiplier;
-    return Math.min(delay, 30000);
+    
+    // Progressive timeout increases for slow networks
+    let progressiveMultiplier = 1;
+    if (this.connectionQuality === 'poor' || this.connectionQuality === 'unstable') {
+      progressiveMultiplier = 1 + (retryCount * 0.5); // Increase delay by 50% per retry for slow networks
+    }
+    
+    // Cap maximum retry delay at 60 seconds for slow networks, 30 seconds for others
+    const maxDelay = (this.connectionQuality === 'poor' || this.connectionQuality === 'unstable') ? 60000 : 30000;
+    const delay = baseDelay * Math.pow(2, retryCount) * qualityMultiplier * progressiveMultiplier;
+    return Math.min(delay, maxDelay);
   }
   
-  async monitorAndAdapt(uploadStartTime: number, bytesUploaded: number) {
+  getAdaptiveTimeout(baseTimeout: number, partNumber: number): number {
+    let timeoutMultiplier = 1;
+    switch (this.connectionQuality) {
+      case 'excellent': timeoutMultiplier = 0.8; break;
+      case 'good': timeoutMultiplier = 1.0; break;
+      case 'fair': timeoutMultiplier = 1.2; break;
+      case 'poor': timeoutMultiplier = 2.0; break;
+      case 'unstable': timeoutMultiplier = 3.0; break;
+    }
+    
+    // Longer timeout for initial chunks as they're testing the network
+    if (partNumber <= 3) {
+      timeoutMultiplier *= 1.5;
+    }
+    
+    return Math.min(baseTimeout * timeoutMultiplier, 180000); // Max 3 minutes
+  }
+  
+  async monitorAndAdapt(uploadStartTime: number, bytesUploaded: number, consecutiveSuccesses?: number) {
     const currentTime = performance.now();
     const elapsedSeconds = (currentTime - uploadStartTime) / 1000;
     
@@ -170,7 +210,40 @@ class NetworkAdapter {
         return { shouldAdjust: true, newSpeed: avgSpeed, quality: this.connectionQuality };
       }
     }
+    
+    // Check if we should recommend larger chunk sizes based on consecutive successes
+    if (consecutiveSuccesses && consecutiveSuccesses >= 5) {
+      return { 
+        shouldAdjust: true, 
+        recommendLargerChunks: true, 
+        consecutiveSuccesses,
+        quality: this.connectionQuality 
+      };
+    }
+    
     return { shouldAdjust: false };
+  }
+  
+  getOptimalChunkSizeForPart(baseChunkSize: number, partNumber: number, consecutiveSuccesses: number): number {
+    const MB = 1024 * 1024;
+    
+    // Start with test size for first 3 chunks
+    if (partNumber <= 3) {
+      return Math.max(5 * MB, Math.min(baseChunkSize, 5 * MB));
+    }
+    
+    // Gradually increase chunk size based on consecutive successes
+    let sizeMultiplier = 1;
+    if (consecutiveSuccesses >= 5 && this.connectionQuality !== 'poor' && this.connectionQuality !== 'unstable') {
+      // Increase chunk size by 25% for every 5 consecutive successes, up to 2x base size
+      const increments = Math.floor(consecutiveSuccesses / 5);
+      sizeMultiplier = Math.min(1 + (increments * 0.25), 2.0);
+      console.log(`📈 Increasing chunk size by ${Math.round((sizeMultiplier - 1) * 100)}% due to ${consecutiveSuccesses} consecutive successes`);
+    }
+    
+    const adaptiveSize = Math.round(baseChunkSize * sizeMultiplier);
+    // Ensure we stay within R2 limits
+    return Math.max(5 * MB, Math.min(50 * MB, adaptiveSize));
   }
   
   getNetworkStats() {
@@ -238,9 +311,10 @@ class StreamingFileReader {
     this.position = (partNumber - 1) * this.chunkSize;
   }
 
-  getChunk(partNumber: number): Blob {
-    const start = (partNumber - 1) * this.chunkSize;
-    const end = Math.min(start + this.chunkSize, this.file.size);
+  getChunk(partNumber: number, customChunkSize?: number): Blob {
+    const chunkSize = customChunkSize || this.chunkSize;
+    const start = (partNumber - 1) * this.chunkSize; // Use original chunk boundaries
+    const end = Math.min(start + chunkSize, this.file.size);
     return this.file.slice(start, end);
   }
 
@@ -736,19 +810,22 @@ export function TransferForm() {
       setNetworkInfo(detectedNetworkInfo);
       const networkAdapter = NetworkAdapter.getInstance();
       
-      const CHUNK_SIZE = await calculateOptimalChunkSize(file.size);
-      const isSingleUpload = CHUNK_SIZE >= file.size; // Single upload if chunk size equals or exceeds file size
-      const chunks = isSingleUpload ? 1 : Math.ceil(file.size / CHUNK_SIZE);
+      const BASE_CHUNK_SIZE = await calculateOptimalChunkSize(file.size);
+      const isSingleUpload = BASE_CHUNK_SIZE >= file.size; // Single upload if chunk size equals or exceeds file size
+      const chunks = isSingleUpload ? 1 : Math.ceil(file.size / BASE_CHUNK_SIZE);
       let CONCURRENT_UPLOADS = await calculateOptimalConcurrency(file.size, chunks);
       const MAX_RETRIES = 3;
       const RETRY_DELAY = 1000; // Base retry delay
+      const BASE_TIMEOUT = 60000; // Base timeout of 60 seconds
       
       // Track upload start time for bandwidth monitoring
       const uploadStartTime = performance.now();
       let totalBytesUploaded = 0;
+      let consecutiveSuccesses = 0;
+      let lastSuccessTime = uploadStartTime;
       
       // Create streaming file reader for memory-efficient processing
-      const fileReader = new StreamingFileReader(file, CHUNK_SIZE);
+      const fileReader = new StreamingFileReader(file, BASE_CHUNK_SIZE);
       
       // Detect development environment
       const isDevelopment = window.location.hostname === 'localhost' || 
@@ -765,8 +842,9 @@ export function TransferForm() {
       if (isSingleUpload) {
         console.log(`📦 Upload mode: Single upload (file < 5MB, avoiding R2 multipart limits)`);
       } else {
-        console.log(`🧩 Chunk size: ${formatFileSize(CHUNK_SIZE)} (${chunks} chunks total)`);
+        console.log(`🧩 Base chunk size: ${formatFileSize(BASE_CHUNK_SIZE)} (${chunks} chunks total)`);
         console.log(`⚡ Concurrency: ${CONCURRENT_UPLOADS} parallel uploads`);
+        console.log(`🧪 First 3 chunks will use smaller sizes for network testing`);
       }
       console.log(`🎯 Environment: ${isDevelopment ? 'Development' : 'Production'} mode`);
       
@@ -848,10 +926,14 @@ export function TransferForm() {
         }));
       };
 
-      const uploadChunkWithRetry = async (partNumber: number, chunk: Blob, retryCount = 0): Promise<{ partNumber: number; etag: string }> => {
+      const uploadChunkWithRetry = async (partNumber: number, chunk: Blob, retryCount = 0, dynamicChunkSize?: number): Promise<{ partNumber: number; etag: string }> => {
         try {
+          // Use dynamic chunk size if provided, otherwise use original chunk
+          const actualChunk = dynamicChunkSize && dynamicChunkSize !== chunk.size ? 
+            fileReader.getChunk(partNumber, dynamicChunkSize) : chunk;
+          
           // Store chunk size for progress calculation
-          chunkSizes.set(partNumber, chunk.size);
+          chunkSizes.set(partNumber, actualChunk.size);
           chunkProgress.set(partNumber, 0);
 
           return await new Promise<{ partNumber: number; etag: string }>((resolve, reject) => {
@@ -917,6 +999,20 @@ export function TransferForm() {
                   const result = JSON.parse(xhr.responseText);
                   // Mark this chunk as fully uploaded
                   chunkProgress.delete(partNumber);
+                  
+                  // Track consecutive successes for adaptive chunk sizing
+                  consecutiveSuccesses++;
+                  lastSuccessTime = performance.now();
+                  
+                  // Check if we should adapt network settings based on success pattern
+                  if (consecutiveSuccesses % 5 === 0) {
+                    networkAdapter.monitorAndAdapt(uploadStartTime, totalBytesUploaded, consecutiveSuccesses).then((result: any) => {
+                      if (result.recommendLargerChunks) {
+                        console.log(`🚀 Network proving stable with ${consecutiveSuccesses} consecutive successes - future chunks may be larger`);
+                      }
+                    }).catch(() => {});
+                  }
+                  
                   resolve(result);
                 } catch (e) {
                   chunkProgress.delete(partNumber);
@@ -956,12 +1052,13 @@ export function TransferForm() {
             chunkFormData.append('key', fileData.key);
             chunkFormData.append('uploadId', fileData.uploadId);
             chunkFormData.append('partNumber', partNumber.toString());
-            chunkFormData.append('chunk', chunk);
+            chunkFormData.append('chunk', actualChunk);
 
-            // Set timeout for stuck uploads
-            xhr.timeout = 60000; // 60 second timeout
+            // Set adaptive timeout based on network quality and part number
+            const adaptiveTimeout = networkAdapter.getAdaptiveTimeout(BASE_TIMEOUT, partNumber);
+            xhr.timeout = adaptiveTimeout;
             xhr.addEventListener('timeout', () => {
-              console.error(`⏰ Chunk ${partNumber}/${chunks} timed out after 60 seconds`);
+              console.error(`⏰ Chunk ${partNumber}/${chunks} timed out after ${Math.round(adaptiveTimeout/1000)} seconds (${detectedNetworkInfo.quality} network)`);
               chunkProgress.delete(partNumber);
               reject(new Error('Upload timeout'));
             });
@@ -973,6 +1070,9 @@ export function TransferForm() {
 
         } catch (error) {
           chunkProgress.delete(partNumber);
+          
+          // Reset consecutive successes on any error
+          consecutiveSuccesses = 0;
           
           if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Upload paused' || error.message === 'Upload cancelled')) {
             throw error;
@@ -1067,7 +1167,11 @@ export function TransferForm() {
         startPart,
         chunks,
         CONCURRENT_UPLOADS,
-        uploadChunkWithRetry
+        (partNumber: number, chunk: Blob) => {
+          // Calculate optimal chunk size for this part based on network performance
+          const optimalChunkSize = networkAdapter.getOptimalChunkSizeForPart(BASE_CHUNK_SIZE, partNumber, consecutiveSuccesses);
+          return uploadChunkWithRetry(partNumber, chunk, 0, optimalChunkSize);
+        }
       );
 
       // Log final memory usage
