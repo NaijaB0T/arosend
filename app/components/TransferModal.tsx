@@ -23,7 +23,7 @@ export function TransferModal({ isOpen, onClose }: TransferModalProps) {
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold">NaijaTransfer</h2>
+              <h2 className="text-2xl font-bold">Arosend</h2>
               <p className="text-blue-100 text-sm">Fast & secure file transfer</p>
             </div>
             <button
@@ -42,7 +42,7 @@ export function TransferModal({ isOpen, onClose }: TransferModalProps) {
               🆓 100% Free
             </div>
             <div className="bg-white bg-opacity-20 rounded-full px-3 py-1 text-xs font-medium">
-              📦 Up to 15GB
+              📦 No file size limit
             </div>
             <div className="bg-white bg-opacity-20 rounded-full px-3 py-1 text-xs font-medium">
               ⏰ 24-hour storage

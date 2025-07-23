@@ -1186,13 +1186,13 @@ export function TransferForm() {
       }
     };
     
-    localStorage.setItem('naijatransfer_upload_state', JSON.stringify(serializableState));
+    localStorage.setItem('arosend_upload_state', JSON.stringify(serializableState));
   };
 
   // Load upload state from localStorage
   const loadUploadState = (): { transferId: string; formData: TransferFormData } | null => {
     try {
-      const saved = localStorage.getItem('naijatransfer_upload_state');
+      const saved = localStorage.getItem('arosend_upload_state');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -1201,7 +1201,7 @@ export function TransferForm() {
 
   // Clear upload state from localStorage
   const clearUploadState = () => {
-    localStorage.removeItem('naijatransfer_upload_state');
+    localStorage.removeItem('arosend_upload_state');
   };
 
   const convertToFreshUpload = async (fileInfo: FileInfo) => {
@@ -1667,7 +1667,7 @@ export function TransferForm() {
                 <div className="text-2xl">📄</div>
                 <div>
                   <p className="text-sm font-semibold text-gray-900">+ Add files</p>
-                  <p className="text-xs text-gray-500 mt-1 font-light">Up to 15GB</p>
+                  <p className="text-xs text-gray-500 mt-1 font-light">No file size limit</p>
                 </div>
               </div>
               <input

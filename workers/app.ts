@@ -85,7 +85,7 @@ app.use('/api/*', cors());
 const CreateTransferSchema = z.object({
   files: z.array(z.object({
     filename: z.string(),
-    filesize: z.number().positive().max(15 * 1024 * 1024 * 1024) // 15GB limit
+    filesize: z.number().positive() // No file size limit
   }))
 });
 
@@ -127,7 +127,7 @@ async function sendEmailWithResend(apiKey: string, to: string, subject: string, 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Arosend <onboarding@aroko.femitaofeeq.com>',
+        from: 'Arosend <onboarding@arosend.com>',
         to: [to],
         subject: subject,
         html: html,
@@ -455,8 +455,8 @@ app.post("/api/transfers", async (c) => {
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).bind(
         transferId,
-        'anonymous@naijatransfer.com', // dummy email
-        JSON.stringify(['anonymous@naijatransfer.com']), // dummy email array
+        'anonymous@arosend.com', // dummy email
+        JSON.stringify(['anonymous@arosend.com']), // dummy email array
         null, // no message
         'pending',
         expiresAt,

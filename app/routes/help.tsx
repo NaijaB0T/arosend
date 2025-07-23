@@ -105,7 +105,7 @@ export default function Help() {
                   Can't find what you're looking for? Our support team is here to help.
                 </p>
                 <a 
-                  href="mailto:support@aroko.femitaofeeq.com"
+                  href="mailto:support@arosend.com"
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium inline-block"
                 >
                   Contact Support
@@ -150,7 +150,7 @@ export default function Help() {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <a 
-                    href="mailto:support@aroko.femitaofeeq.com"
+                    href="mailto:support@arosend.com"
                     className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium text-center"
                   >
                     Email Support

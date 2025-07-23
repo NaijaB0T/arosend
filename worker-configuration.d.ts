@@ -5,7 +5,7 @@ declare namespace Cloudflare {
 	interface Env {
 		AUTH_STORAGE: KVNamespace;
 		RESEND_API_KEY: "re_TCScdzqZ_B65rfNYd68eUDmb4QzcameCe";
-		BASE_URL: "http://localhost:5173";
+		BASE_URL: "https://arosend.com";
 		PAYSTACK_SECRET_KEY: "sk_live_e3b40985be973f94a67cff3899176ea8139e307a";
 		FILE_BUCKET: R2Bucket;
 		DB: D1Database;

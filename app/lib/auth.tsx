@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
-const AUTH_BASE_URL = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+const AUTH_BASE_URL = typeof window !== "undefined" ? window.location.origin : "https://arosend.com";
 
 interface AuthUser {
   id: string;
@@ -127,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: new URLSearchParams({
           grant_type: 'authorization_code',
           code: code,
-          client_id: 'naijasender-webapp',
+          client_id: 'arosend-webapp',
           redirect_uri: AUTH_BASE_URL + '/callback'
         })
       });
