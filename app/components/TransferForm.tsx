@@ -895,7 +895,7 @@ export function TransferForm() {
         
         // Add bytes from completed chunks
         for (const part of uploadParts) {
-          const chunkSize = Math.min(CHUNK_SIZE, file.size - (part.partNumber - 1) * CHUNK_SIZE);
+          const chunkSize = Math.min(BASE_CHUNK_SIZE, file.size - (part.partNumber - 1) * BASE_CHUNK_SIZE);
           totalBytesUploaded += chunkSize;
         }
         

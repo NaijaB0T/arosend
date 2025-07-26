@@ -1,5 +1,5 @@
 -- Add upload_status column to track file upload progress
--- This migration handles cases where column might already exist
+ALTER TABLE files ADD COLUMN upload_status TEXT DEFAULT 'pending' NOT NULL;
 
--- Create index for upload_status (will succeed whether column exists or not)
+-- Create an index on the new column for faster queries
 CREATE INDEX IF NOT EXISTS idx_files_upload_status ON files(upload_status);

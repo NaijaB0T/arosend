@@ -709,6 +709,7 @@ app.post("/api/transfers/complete", async (c) => {
     const body = await c.req.json();
     console.log('📝 Request body keys:', Object.keys(body));
     console.log('📝 Parts count:', body.parts?.length || 0);
+    console.log('📝 Full request body:', JSON.stringify(body, null, 2));
     
     const validatedData = CompleteTransferSchema.parse(body);
     console.log('✅ Validation successful');
@@ -726,6 +727,9 @@ app.post("/api/transfers/complete", async (c) => {
     } else {
       // Complete the multipart upload
       console.log('📤 Resuming multipart upload for key:', validatedData.key);
+      console.log('📤 Upload ID:', validatedData.uploadId);
+      console.log('📤 Parts to complete:', JSON.stringify(validatedData.parts, null, 2));
+      
       const multipartUpload = c.env.FILE_BUCKET.resumeMultipartUpload(
         validatedData.key,
         validatedData.uploadId
@@ -756,6 +760,7 @@ app.post("/api/transfers/complete", async (c) => {
     console.error('❌ Error completing transfer:', error);
     console.error('Error type:', error?.constructor?.name);
     console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     
     if (error instanceof z.ZodError) {
       console.error('Validation errors:', error.errors);

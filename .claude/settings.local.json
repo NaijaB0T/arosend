@@ -12,7 +12,9 @@
       "Bash(grep:*)",
       "Bash(wrangler d1 execute:*)",
       "Bash(find:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(npm ls:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }
