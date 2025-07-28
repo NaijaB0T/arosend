@@ -569,11 +569,28 @@ app.post("/api/uploads/chunk", async (c) => {
     const multipartUpload = c.env.FILE_BUCKET.resumeMultipartUpload(key, uploadId);
     const uploadPart = await multipartUpload.uploadPart(partNumber, chunk);
     
-    console.log(`Part ${partNumber} uploaded successfully with etag: ${uploadPart.etag}`);
+    // Sanitize and validate ETag
+    let cleanEtag = uploadPart.etag;
+    if (cleanEtag) {
+      // Remove quotes and whitespace
+      cleanEtag = cleanEtag.replace(/['"]/g, '').trim();
+      
+      // Validate ETag format - R2 uses different format than standard S3
+      // R2 ETags can contain: letters, numbers, hyphens, underscores, and are longer than 32 chars
+      const isValidEtag = /^[a-zA-Z0-9_-]+$/.test(cleanEtag) && cleanEtag.length > 0;
+      
+      if (!isValidEtag) {
+        console.error(`❌ R2 returned invalid ETag format for part ${partNumber}: "${uploadPart.etag}"`);
+        console.error(`Sanitized ETag: "${cleanEtag}"`);
+        throw new Error(`Invalid ETag format returned by R2 for part ${partNumber}`);
+      }
+    }
+    
+    console.log(`Part ${partNumber} uploaded successfully with etag: ${cleanEtag}`);
     
     return c.json({ 
       partNumber,
-      etag: uploadPart.etag 
+      etag: cleanEtag 
     });
     
   } catch (error) {
@@ -730,14 +747,135 @@ app.post("/api/transfers/complete", async (c) => {
       console.log('📤 Upload ID:', validatedData.uploadId);
       console.log('📤 Parts to complete:', JSON.stringify(validatedData.parts, null, 2));
       
+      // Validate and deduplicate parts with ETag sanitization
+      const partNumbers = new Set();
+      const validParts = validatedData.parts.filter(part => {
+        if (partNumbers.has(part.partNumber)) {
+          console.warn(`⚠️ Duplicate part number ${part.partNumber} found, skipping`);
+          return false;
+        }
+        if (!part.etag || part.etag.trim() === '') {
+          console.warn(`⚠️ Invalid etag for part ${part.partNumber}, skipping`);
+          return false;
+        }
+        
+        // Validate ETag format - R2 uses different format than standard S3
+        const cleanEtag = part.etag.replace(/['"]/g, ''); // Remove quotes
+        const isValidEtag = /^[a-zA-Z0-9_-]+$/.test(cleanEtag) && cleanEtag.length > 0;
+        
+        if (!isValidEtag) {
+          console.error(`❌ Invalid ETag format for part ${part.partNumber}: "${part.etag}"`);
+          console.error(`Expected format: alphanumeric with hyphens and underscores`);
+          return false;
+        }
+        
+        partNumbers.add(part.partNumber);
+        return true;
+      });
+      
+      // Sort parts by part number to ensure proper order
+      validParts.sort((a, b) => a.partNumber - b.partNumber);
+      
+      console.log(`🔍 Filtered ${validatedData.parts.length} parts to ${validParts.length} valid parts`);
+      
+      // Additional validation for R2 multipart upload limits
+      if (validParts.length === 0) {
+        throw new Error('No valid parts found for multipart upload completion');
+      }
+      
+      if (validParts.length > 1000) {
+        console.warn(`⚠️ Large number of parts (${validParts.length}). This may cause performance issues.`);
+      }
+      
+      // Validate part numbering is sequential
+      const sortedPartNumbers = validParts.map(p => p.partNumber).sort((a, b) => a - b);
+      const expectedParts = Array.from({length: validParts.length}, (_, i) => i + 1);
+      const missingParts = expectedParts.filter(expected => !sortedPartNumbers.includes(expected));
+      
+      if (missingParts.length > 0) {
+        console.error(`❌ Missing parts detected: ${missingParts.slice(0, 10).join(', ')}${missingParts.length > 10 ? '...' : ''}`);
+        throw new Error(`Cannot complete upload: missing ${missingParts.length} parts`);
+      }
+      
+      console.log(`📊 Part range: ${Math.min(...sortedPartNumbers)} to ${Math.max(...sortedPartNumbers)} (${validParts.length} total)`);
+      
+      // Check for common issues that cause error 10048
+      const hasPartOne = validParts.some(p => p.partNumber === 1);
+      const hasGaps = sortedPartNumbers.some((num, index) => index > 0 && num !== sortedPartNumbers[index - 1] + 1);
+      const duplicateParts = validParts.length !== new Set(validParts.map(p => p.partNumber)).size;
+      
+      console.log('🔍 Upload validation checks:', {
+        hasPartOne,
+        hasGaps,
+        duplicateParts,
+        firstPart: Math.min(...sortedPartNumbers),
+        lastPart: Math.max(...sortedPartNumbers),
+        expectedLastPart: validParts.length,
+        allPartsValid: sortedPartNumbers.every(num => num >= 1 && num <= validParts.length)
+      });
+      
+      // Additional validation: Ensure parts are 1-indexed and sequential
+      if (!hasPartOne) {
+        throw new Error('Missing part 1 - multipart uploads must start with part 1');
+      }
+      
+      if (Math.max(...sortedPartNumbers) !== validParts.length) {
+        console.error(`❌ Part numbering issue: highest part is ${Math.max(...sortedPartNumbers)} but expected ${validParts.length}`);
+        throw new Error(`Invalid part numbering: expected parts 1-${validParts.length}, but highest part is ${Math.max(...sortedPartNumbers)}`);
+      }
+      
       const multipartUpload = c.env.FILE_BUCKET.resumeMultipartUpload(
         validatedData.key,
         validatedData.uploadId
       );
       
-      console.log('🔗 Completing upload with parts:', validatedData.parts.length);
-      object = await multipartUpload.complete(validatedData.parts);
-      console.log('✅ Multipart upload completed successfully');
+      console.log('🔗 Completing upload with parts:', validParts.length);
+      
+      // Retry completion with exponential backoff
+      let completionAttempt = 0;
+      const maxCompletionRetries = 3;
+      
+      while (completionAttempt < maxCompletionRetries) {
+        try {
+          completionAttempt++;
+          console.log(`🔄 Completion attempt ${completionAttempt}/${maxCompletionRetries}`);
+          
+          // Add timeout handling for the completion
+          const completionPromise = multipartUpload.complete(validParts);
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Multipart upload completion timed out after 5 minutes')), 300000);
+          });
+          
+          object = await Promise.race([completionPromise, timeoutPromise]);
+          console.log('✅ Multipart upload completed successfully');
+          break; // Success, exit retry loop
+          
+        } catch (completionError) {
+          console.error(`❌ Multipart upload completion attempt ${completionAttempt} failed:`, completionError);
+          
+          if (completionAttempt >= maxCompletionRetries) {
+            // Final attempt failed, log details and re-throw
+            console.error('Upload details:', {
+              key: validatedData.key,
+              uploadId: validatedData.uploadId,
+              totalParts: validParts.length,
+              firstFewParts: validParts.slice(0, 3),
+              lastFewParts: validParts.slice(-3)
+            });
+            
+            // Re-throw with more context
+            if (completionError instanceof Error) {
+              throw new Error(`Multipart upload completion failed after ${maxCompletionRetries} attempts: ${completionError.message}`);
+            }
+            throw completionError;
+          } else {
+            // Wait before retry (exponential backoff)
+            const retryDelay = Math.pow(2, completionAttempt) * 1000; // 2s, 4s, 8s
+            console.log(`⏳ Retrying in ${retryDelay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+          }
+        }
+      }
     }
     
     // Update file upload status to completed

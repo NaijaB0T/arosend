@@ -77,11 +77,13 @@ class NetworkAdapter {
     if (fileSize < 100 * MB) {
       baseChunkSize = 5 * MB; // Minimum 5MB for R2 multipart upload compliance
     } else if (fileSize < 1 * GB) {
-      baseChunkSize = 8 * MB; // Slightly larger for efficiency
+      baseChunkSize = 15 * MB; // Larger chunks for files approaching 1GB (reduces part count)
+    } else if (fileSize < 5 * GB) {
+      baseChunkSize = 25 * MB; // Optimized for large files
     } else if (fileSize < 10 * GB) {
-      baseChunkSize = 15 * MB; // Optimized for large files
+      baseChunkSize = 40 * MB; // Even larger for very big files
     } else {
-      baseChunkSize = 25 * MB; // Large chunks for very big files
+      baseChunkSize = 50 * MB; // Maximum chunk size for huge files
     }
     
     // Use smaller chunks for initial network testing (first 3 chunks)
@@ -101,8 +103,8 @@ class NetworkAdapter {
     
     const adaptiveChunkSize = Math.round(baseChunkSize * speedMultiplier);
     // Ensure we never go below 5MB for multipart uploads (R2 requirement)
-    // and never above 50MB for efficiency
-    return Math.max(5 * MB, Math.min(50 * MB, adaptiveChunkSize));
+    // and never above 100MB for very large files (increased from 50MB)
+    return Math.max(5 * MB, Math.min(100 * MB, adaptiveChunkSize));
   }
   
   formatBytes(bytes: number): string {
@@ -242,8 +244,8 @@ class NetworkAdapter {
     }
     
     const adaptiveSize = Math.round(baseChunkSize * sizeMultiplier);
-    // Ensure we stay within R2 limits
-    return Math.max(5 * MB, Math.min(50 * MB, adaptiveSize));
+    // Ensure we stay within R2 limits (increased max to 100MB)
+    return Math.max(5 * MB, Math.min(100 * MB, adaptiveSize));
   }
   
   getNetworkStats() {
@@ -312,9 +314,10 @@ class StreamingFileReader {
   }
 
   getChunk(partNumber: number, customChunkSize?: number): Blob {
-    const chunkSize = customChunkSize || this.chunkSize;
-    const start = (partNumber - 1) * this.chunkSize; // Use original chunk boundaries
-    const end = Math.min(start + chunkSize, this.file.size);
+    // CRITICAL: Always use original chunk boundaries to prevent overlaps
+    // Custom chunk size only affects the end boundary, not the start
+    const start = (partNumber - 1) * this.chunkSize;
+    const end = Math.min(start + this.chunkSize, this.file.size); // Always use original size
     return this.file.slice(start, end);
   }
 
@@ -373,7 +376,11 @@ async function streamingConcurrentUpload(
       
       const uploadPromise = uploadCallback(chunkData.partNumber, chunkData.chunk)
         .then(result => {
-          uploadParts.push(result);
+          // Check for duplicate parts before adding
+          const existingPart = uploadParts.find(p => p.partNumber === result.partNumber);
+          if (!existingPart) {
+            uploadParts.push(result);
+          }
           currentConcurrency--;
           
           // Force garbage collection every 5 completed uploads
@@ -926,11 +933,10 @@ export function TransferForm() {
         }));
       };
 
-      const uploadChunkWithRetry = async (partNumber: number, chunk: Blob, retryCount = 0, dynamicChunkSize?: number): Promise<{ partNumber: number; etag: string }> => {
+      const uploadChunkWithRetry = async (partNumber: number, chunk: Blob, retryCount = 0): Promise<{ partNumber: number; etag: string }> => {
         try {
-          // Use dynamic chunk size if provided, otherwise use original chunk
-          const actualChunk = dynamicChunkSize && dynamicChunkSize !== chunk.size ? 
-            fileReader.getChunk(partNumber, dynamicChunkSize) : chunk;
+          // Always use the original chunk to maintain data integrity
+          const actualChunk = chunk;
           
           // Store chunk size for progress calculation
           chunkSizes.set(partNumber, actualChunk.size);
@@ -1168,9 +1174,8 @@ export function TransferForm() {
         chunks,
         CONCURRENT_UPLOADS,
         (partNumber: number, chunk: Blob) => {
-          // Calculate optimal chunk size for this part based on network performance
-          const optimalChunkSize = networkAdapter.getOptimalChunkSizeForPart(BASE_CHUNK_SIZE, partNumber, consecutiveSuccesses);
-          return uploadChunkWithRetry(partNumber, chunk, 0, optimalChunkSize);
+          // Use consistent chunk sizes to prevent data integrity issues
+          return uploadChunkWithRetry(partNumber, chunk, 0);
         }
       );
 
