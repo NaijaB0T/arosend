@@ -966,20 +966,73 @@ app.get("/api/file/:transferId/:filename", async (c) => {
       return c.json({ error: 'File not found' }, 404);
     }
     
-    // Get file from R2
-    const object = await c.env.FILE_BUCKET.get(file.r2_object_key as string);
+    // Get Range header for resumable downloads
+    const rangeHeader = c.req.header('range');
+    const fileSize = file.filesize as number;
     
-    if (!object) {
-      return c.json({ error: 'File not found in storage' }, 404);
-    }
-    
-    return new Response(object.body, {
-      headers: {
-        'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': object.size.toString()
+    if (rangeHeader) {
+      // Parse range header: "bytes=start-end" or "bytes=start-"
+      const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      
+      if (!rangeMatch) {
+        return new Response('Invalid Range header', { status: 416 });
       }
-    });
+      
+      const start = parseInt(rangeMatch[1], 10);
+      const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : fileSize - 1;
+      
+      // Validate range
+      if (start >= fileSize || end >= fileSize || start > end) {
+        return new Response('Range Not Satisfiable', { 
+          status: 416,
+          headers: {
+            'Content-Range': `bytes */${fileSize}`
+          }
+        });
+      }
+      
+      const contentLength = end - start + 1;
+      
+      // Get partial file from R2 using range
+      const object = await c.env.FILE_BUCKET.get(file.r2_object_key as string, {
+        range: { offset: start, length: contentLength }
+      });
+      
+      if (!object) {
+        return c.json({ error: 'File not found in storage' }, 404);
+      }
+      
+      // Return partial content (206)
+      return new Response(object.body, {
+        status: 206,
+        headers: {
+          'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': contentLength.toString(),
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-cache'
+        }
+      });
+    } else {
+      // No range requested - return full file
+      const object = await c.env.FILE_BUCKET.get(file.r2_object_key as string);
+      
+      if (!object) {
+        return c.json({ error: 'File not found in storage' }, 404);
+      }
+      
+      // Return full content (200) with Accept-Ranges header
+      return new Response(object.body, {
+        headers: {
+          'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': object.size.toString(),
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-cache'
+        }
+      });
+    }
     
   } catch (error) {
     console.error('Error downloading file:', error);
@@ -1974,6 +2027,6 @@ app.get("/api/test/schema", async (c) => {
     
   } catch (error) {
     console.error('Schema check error:', error);
-    return c.json({ error: 'Schema check failed', details: error.message }, 500);
+    return c.json({ error: 'Schema check failed', details: error instanceof Error ? error.message : 'Unknown error' }, 500);
   }
 });
