@@ -149,6 +149,39 @@ async function sendEmailWithResend(apiKey: string, to: string, subject: string, 
   }
 }
 
+// Helper function to send payment notification email
+async function sendPaymentNotification(amount: number, credits: number, userEmail: string, transactionType: string = 'credit_purchase'): Promise<void> {
+  try {
+    const notificationUrl = 'http://mail-sender.femivideograph.workers.dev/notification';
+    const amountInNaira = amount / 100;
+    
+    let message = '';
+    if (transactionType === 'extension') {
+      message = `Transfer extension payment: ₦${amountInNaira} from ${userEmail}`;
+    } else {
+      message = `Credit purchase: ₦${amountInNaira} for ${credits} credits from ${userEmail}`;
+    }
+    
+    const params = new URLSearchParams({
+      mail: 'femivideograph@gmail.com',
+      message: message,
+      subject: `Payment Received - ₦${amountInNaira}`
+    });
+    
+    const response = await fetch(`${notificationUrl}?${params.toString()}`, {
+      method: 'GET'
+    });
+    
+    if (response.ok) {
+      console.log(`Payment notification sent: ${message}`);
+    } else {
+      console.error('Failed to send payment notification:', response.status, response.statusText);
+    }
+  } catch (error) {
+    console.error('Error sending payment notification:', error);
+  }
+}
+
 // Helper function to handle OpenAuth requests
 async function handleOpenAuth(c: any) {
   console.log(`Auth route hit: ${c.req.method} ${c.req.url}`);
@@ -1724,6 +1757,10 @@ app.post("/api/payments/verify", async (c) => {
             UPDATE transfers SET expires_at = ? WHERE id = ?
           `).bind(newExpiry, transferId).run();
           
+          // Send payment notification email for extension payment
+          const guestEmail = paystackData.data.metadata?.guest_email || 'unknown@email.com';
+          await sendPaymentNotification(paystackData.data.amount, 0, guestEmail, 'extension');
+          
           console.log(`Extended transfer ${transferId} by ${days} days`);
         }
         
@@ -1758,6 +1795,15 @@ app.post("/api/payments/verify", async (c) => {
       await c.env.DB.prepare(`
         UPDATE users SET credits = credits + ?, updated_at = ? WHERE id = ?
       `).bind(transaction.credits, Date.now(), transaction.user_id).run();
+      
+      // Get user email for notification
+      const user = await c.env.DB.prepare(`
+        SELECT email FROM users WHERE id = ?
+      `).bind(transaction.user_id).first<{ email: string }>();
+      const userEmail = user?.email || 'unknown@email.com';
+      
+      // Send payment notification email
+      await sendPaymentNotification(transaction.amount, transaction.credits, userEmail, 'credit_purchase');
       
       return c.json({ status: 'success', credits_added: transaction.credits });
     } else {
