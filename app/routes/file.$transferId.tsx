@@ -9,6 +9,7 @@ import { ExpiryWarningModal } from "../components/ExpiryWarningModal";
 import { ExtendExpiryConfirmationModal } from "../components/ExtendExpiryConfirmationModal";
 import { DeletionWarningModal } from "../components/DeletionWarningModal";
 import { formatNGNWithUSD, formatNGNWithUSDFixed } from "../lib/currency";
+import { MediaPreview } from "../components/MediaPreview";
 
 export function meta({ params }: Route.MetaArgs) {
   return [
@@ -601,51 +602,68 @@ export default function FilePage() {
                 </div>
               </div>
 
-              {/* Direct Download Links */}
+              {/* Files with Previews and Download Links */}
               {transfer.files.length > 0 && (
                 <div className="mb-6">
-                  <label className="block text-white font-medium mb-2">Direct download links:</label>
-                  <div className="space-y-4">
+                  <label className="block text-white font-medium mb-4">Your files:</label>
+                  <div className="space-y-6">
                     {transfer.files.map((file) => {
                       const fileDownloadUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/file/${transfer.id}/${encodeURIComponent(file.filename)}`;
                       
                       return (
-                        <div key={file.id} className="bg-white/5 rounded-lg p-4">
-                          {/* File Info */}
-                          <div className="flex items-center mb-3">
-                            <div className="text-xl mr-3">📁</div>
-                            <div>
-                              <p className="text-white font-medium">{file.filename}</p>
-                              <p className="text-white/60 text-sm">{formatFileSize(file.size)}</p>
+                        <div key={file.id} className="bg-white/5 rounded-lg p-6">
+                          {/* File Info Header */}
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center">
+                              <div className="text-xl mr-3">📁</div>
+                              <div>
+                                <p className="text-white font-medium">{file.filename}</p>
+                                <p className="text-white/60 text-sm">{formatFileSize(file.size)}</p>
+                              </div>
                             </div>
+                            <a
+                              href={fileDownloadUrl}
+                              download={file.filename}
+                              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                            >
+                              Download
+                            </a>
                           </div>
                           
-                          {/* Download Link Input */}
-                          <div className="flex flex-col md:flex-row gap-3">
-                            <input
-                              type="text"
-                              value={fileDownloadUrl}
-                              readOnly
-                              onClick={() => {
-                                // Make the input clickable to download
-                                const link = document.createElement('a');
-                                link.href = fileDownloadUrl;
-                                link.download = file.filename;
-                                link.click();
+                          {/* Media Preview */}
+                          <div className="mb-4">
+                            <MediaPreview 
+                              file={{
+                                id: file.id,
+                                filename: file.filename,
+                                size: file.size,
+                                url: `${typeof window !== 'undefined' ? window.location.origin : ''}/api/preview/${transfer.id}/${encodeURIComponent(file.filename)}`
                               }}
-                              className="flex-1 bg-green-900/20 border border-green-500/30 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-green-500 cursor-pointer hover:bg-green-800/30 transition-colors"
-                              title="Click to download"
+                              transferId={transfer.id}
                             />
-                            <button
-                              onClick={() => copyFileLink(file.id, file.filename)}
-                              className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-                                copiedFileLinks[file.id]
-                                  ? 'bg-green-600 text-white' 
-                                  : 'bg-white/10 text-white hover:bg-white/20'
-                              }`}
-                            >
-                              {copiedFileLinks[file.id] ? 'Copied!' : 'Copy Link'}
-                            </button>
+                          </div>
+                          
+                          {/* Share Link Section */}
+                          <div className="border-t border-white/10 pt-4">
+                            <label className="block text-white/80 font-medium mb-2 text-sm">Share this file:</label>
+                            <div className="flex flex-col md:flex-row gap-3">
+                              <input
+                                type="text"
+                                value={fileDownloadUrl}
+                                readOnly
+                                className="flex-1 bg-white/5 border border-white/20 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                              />
+                              <button
+                                onClick={() => copyFileLink(file.id, file.filename)}
+                                className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                                  copiedFileLinks[file.id]
+                                    ? 'bg-green-600 text-white' 
+                                    : 'bg-white/10 text-white hover:bg-white/20'
+                                }`}
+                              >
+                                {copiedFileLinks[file.id] ? 'Copied!' : 'Copy Link'}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -730,7 +748,7 @@ export default function FilePage() {
                             Cancel
                           </button>
                           <button
-                            onClick={extendTransferWithCredits}
+                            onClick={() => extendTransferWithCredits()}
                             disabled={creditsLoading || paymentLoading}
                             className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -916,7 +934,7 @@ export default function FilePage() {
                               Cancel
                             </button>
                             <button
-                              onClick={extendTransferWithCredits}
+                              onClick={() => extendTransferWithCredits()}
                               disabled={creditsLoading || paymentLoading}
                               className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                             >

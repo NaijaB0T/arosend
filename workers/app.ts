@@ -1025,6 +1025,177 @@ app.get("/api/download/:transferId", async (c) => {
   }
 });
 
+
+// Get presigned URL for file preview
+app.get("/api/preview-url/:transferId/:filename", async (c) => {
+  try {
+    const transferId = c.req.param('transferId');
+    const filename = c.req.param('filename');
+    
+    // Verify transfer exists and is not expired
+    const transfer = await c.env.DB.prepare(`
+      SELECT * FROM transfers WHERE id = ? AND status = 'complete' AND expires_at > ?
+    `).bind(transferId, Date.now()).first();
+    
+    if (!transfer) {
+      return c.json({ error: 'Transfer not found or expired' }, 404);
+    }
+    
+    // Get file details
+    const file = await c.env.DB.prepare(`
+      SELECT * FROM files WHERE transfer_id = ? AND filename = ? AND deletion_status = 'active'
+    `).bind(transferId, filename).first();
+    
+    if (!file) {
+      return c.json({ error: 'File not found' }, 404);
+    }
+    
+    // Generate presigned URL for the file (valid for 1 hour)
+    const presignedUrl = await c.env.FILE_BUCKET.get(file.r2_object_key as string, {
+      onlyIf: { etagMatches: "*" } // This is a trick to get presigned URL without downloading
+    });
+    
+    if (!presignedUrl) {
+      return c.json({ error: 'File not found in storage' }, 404);
+    }
+    
+    // For now, let's use the direct endpoint since R2 presigned URLs via Workers have limitations
+    // We'll serve the file directly through our endpoint
+    const previewUrl = `/api/preview/${transferId}/${encodeURIComponent(filename)}`;
+    
+    return c.json({ 
+      url: previewUrl,
+      expires_in: 3600 // 1 hour
+    });
+    
+  } catch (error) {
+    console.error('Error generating preview URL:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// Get MIME type from file extension
+const getMimeTypeFromExtension = (filename: string): string => {
+  const ext = filename.toLowerCase().split('.').pop() || '';
+  const mimeTypes: {[key: string]: string} = {
+    // Video formats
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'ogg': 'video/ogg',
+    'avi': 'video/x-msvideo',
+    'mov': 'video/quicktime',
+    'wmv': 'video/x-ms-wmv',
+    'flv': 'video/x-flv',
+    'mkv': 'video/x-matroska',
+    '3gp': 'video/3gpp',
+    'm4v': 'video/x-m4v',
+    
+    // Audio formats
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'oga': 'audio/ogg', // Use .oga for audio ogg to avoid conflict
+    'aac': 'audio/aac',
+    'flac': 'audio/flac',
+    'm4a': 'audio/x-m4a',
+    'wma': 'audio/x-ms-wma',
+    
+    // Image formats
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'svg': 'image/svg+xml',
+    'bmp': 'image/bmp',
+    'ico': 'image/x-icon',
+    
+    // Document formats
+    'pdf': 'application/pdf',
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'txt': 'text/plain',
+    'rtf': 'application/rtf'
+  };
+  
+  return mimeTypes[ext] || 'application/octet-stream';
+};
+
+// Preview handler function
+const handlePreviewRequest = async (c: any) => {
+  try {
+    const isHeadRequest = c.req.method === 'HEAD';
+    
+    const transferId = c.req.param('transferId');
+    const filename = c.req.param('filename');
+    
+    // Verify transfer exists and is not expired
+    const transfer = await c.env.DB.prepare(`
+      SELECT * FROM transfers WHERE id = ? AND status = 'complete' AND expires_at > ?
+    `).bind(transferId, Date.now()).first();
+    
+    if (!transfer) {
+      return c.json({ error: 'Transfer not found or expired' }, 404);
+    }
+    
+    // Get file details
+    const file = await c.env.DB.prepare(`
+      SELECT * FROM files WHERE transfer_id = ? AND filename = ? AND deletion_status = 'active'
+    `).bind(transferId, filename).first();
+    
+    if (!file) {
+      return c.json({ error: 'File not found' }, 404);
+    }
+    
+    // Get file from R2 for preview
+    const object = isHeadRequest 
+      ? await c.env.FILE_BUCKET.head(file.r2_object_key as string)
+      : await c.env.FILE_BUCKET.get(file.r2_object_key as string);
+    
+    if (!object) {
+      return c.json({ error: 'File not found in storage' }, 404);
+    }
+
+    // Get correct MIME type from filename if R2 doesn't have it
+    const r2ContentType = object.httpMetadata?.contentType;
+    const correctMimeType = getMimeTypeFromExtension(filename);
+    const finalContentType = (r2ContentType && r2ContentType !== 'application/octet-stream') 
+      ? r2ContentType 
+      : correctMimeType;
+
+    
+    // Return file for inline preview (not as attachment)
+    const responseHeaders = {
+      'Content-Type': finalContentType,
+      'Content-Disposition': 'inline',
+      'Content-Length': object.size?.toString() || '0',
+      'Cache-Control': 'public, max-age=3600',
+      'Accept-Ranges': 'bytes',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD',
+      'Access-Control-Allow-Headers': 'Content-Type, Range'
+    };
+
+    // For HEAD requests, return only headers (no body)
+    // For GET requests, return headers + body
+    return new Response(isHeadRequest ? null : object.body, {
+      headers: responseHeaders
+    });
+    
+  } catch (error) {
+    console.error('Error serving preview file:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+};
+
+// Handle GET and HEAD requests for preview
+app.all("/api/preview/:transferId/:filename", async (c) => {
+  if (c.req.method === 'HEAD' || c.req.method === 'GET') {
+    return handlePreviewRequest(c);
+  }
+  return c.json({ error: 'Method not allowed' }, 405);
+});
+
+
 // Get file content
 app.get("/api/file/:transferId/:filename", async (c) => {
   try {
