@@ -64,29 +64,17 @@ const formatFileSize = (bytes: number): string => {
 };
 
 export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, transferId }) => {
-  console.log('MediaPreview MOUNTED:', { filename: file.filename, url: file.url, transferId });
-  
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const mediaType = getMediaType(file.filename);
   
-  console.log('MediaPreview mediaType:', mediaType, 'for file:', file.filename);
-  
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  // Simple test to verify the endpoint works
-  useEffect(() => {
-    if (mediaType === 'video' || mediaType === 'image') {
-      console.log(`🔍 Testing direct ${mediaType} URL:`, file.url);
-    }
-  }, [file.url, mediaType]);
-  
   // Set loading to false for all media types initially - let the media elements handle their own loading
   useEffect(() => {
-    console.log(`💡 Setting initial loading state for ${mediaType}`);
     setIsLoading(false);
   }, [mediaType]);
   
@@ -118,17 +106,12 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, transferId }) 
   // Add timeout for loading state in case media never loads
   useEffect(() => {
     if (isLoading && (mediaType === 'image' || mediaType === 'video' || mediaType === 'audio')) {
-      console.log(`⏱️ Starting ${mediaType} loading timeout for:`, file.filename);
       const timeout = setTimeout(() => {
-        console.log(`⏱️ ${mediaType} loading timeout reached for:`, file.filename);
         setIsLoading(false);
         setHasError(true);
-      }, 10000); // Shorter 10 second timeout
+      }, 10000);
 
-      return () => {
-        console.log(`⏱️ Clearing ${mediaType} loading timeout for:`, file.filename);
-        clearTimeout(timeout);
-      };
+      return () => clearTimeout(timeout);
     }
   }, [isLoading, mediaType, file.filename]);
 
@@ -151,18 +134,8 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, transferId }) 
               src={file.url}
               alt={file.filename}
               className="max-w-full max-h-96 object-contain rounded-lg cursor-pointer"
-              onLoad={() => {
-                console.log('🖼️ Image loaded successfully:', file.filename);
-                handleMediaLoad();
-              }}
-              onError={(e) => {
-                console.error('🖼️ Image loading error:', {
-                  filename: file.filename,
-                  url: file.url,
-                  error: e
-                });
-                handleMediaError(e);
-              }}
+              onLoad={handleMediaLoad}
+              onError={handleMediaError}
               onClick={toggleFullscreen}
             />
             {!isLoading && !hasError && (
@@ -180,7 +153,6 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, transferId }) 
 
       case 'video':
         const isCompatible = isWebCompatibleVideo(file.filename);
-        console.log(`🎬 Rendering video element with src:`, file.url);
         return (
           <div className="relative" onMouseMove={handleMouseMove}>
             {!isCompatible && (
@@ -198,33 +170,10 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, transferId }) 
               controls={showControls}
               className="max-w-full max-h-96 rounded-lg cursor-pointer"
               src={file.url}
-              onLoadStart={() => console.log('🎬 Video load started:', file.filename)}
-              onLoadedMetadata={() => {
-                console.log('🎬 Video metadata loaded successfully:', file.filename);
-                handleMediaLoad();
-              }}
-              onLoadedData={() => {
-                console.log('🎬 Video data loaded successfully:', file.filename);
-                handleMediaLoad();
-              }}
-              onCanPlay={() => {
-                console.log('🎬 Video can play:', file.filename);
-                handleMediaLoad();
-              }}
-              onError={(e) => {
-                const target = e.target as HTMLVideoElement;
-                const error = target.error;
-                console.error('🎬 Video element error:', {
-                  filename: file.filename,
-                  url: file.url,
-                  currentSrc: target.currentSrc,
-                  errorCode: error?.code,
-                  errorMessage: error?.message,
-                  networkState: target.networkState,
-                  readyState: target.readyState
-                });
-                handleMediaError(e);
-              }}
+              onLoadedMetadata={handleMediaLoad}
+              onLoadedData={handleMediaLoad}
+              onCanPlay={handleMediaLoad}
+              onError={handleMediaError}
               onClick={toggleFullscreen}
               preload="metadata"
             >
