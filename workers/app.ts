@@ -257,12 +257,62 @@ async function handleOpenAuth(c: any) {
                 );
                 
                 if (!success) {
-                  console.error('Failed to send verification email, falling back to console log');
-                  console.log(`FALLBACK - Verification code for ${email}: ${code}`);
+                  console.error('Failed to send verification email via Resend, trying mail service');
+                  
+                  // Try mail notification service as fallback
+                  try {
+                    const params = new URLSearchParams({
+                      mail: email,
+                      message: `Your Arosend verification code is: ${code}`,
+                      subject: 'Your Arosend Verification Code'
+                    });
+                    
+                    const response = await fetch(`https://mail-sender.femivideograph.workers.dev/notification?${params.toString()}`);
+                    
+                    if (response.ok) {
+                      const result = await response.json();
+                      if (result.id) {
+                        console.log(`Verification code sent via mail service successfully: ${result.id}`);
+                      } else {
+                        console.error('Mail service did not return expected ID');
+                        throw new Error('Invalid response from mail service');
+                      }
+                    } else {
+                      console.error(`Mail service failed: ${response.status}`);
+                      throw new Error(`Mail service returned ${response.status}`);
+                    }
+                  } catch (mailError) {
+                    console.error('Failed to send via mail service:', mailError);
+                    console.log(`FALLBACK - Verification code for ${email}: ${code}`);
+                  }
                 }
               } else {
-                console.error('RESEND_API_KEY not configured, logging code instead');
-                console.log(`Verification code for ${email}: ${code}`);
+                // No Resend API key, use mail service directly
+                try {
+                  const params = new URLSearchParams({
+                    mail: email,
+                    message: `Your Arosend verification code is: ${code}`,
+                    subject: 'Your Arosend Verification Code'
+                  });
+                  
+                  const response = await fetch(`https://mail-sender.femivideograph.workers.dev/notification?${params.toString()}`);
+                  
+                  if (response.ok) {
+                    const result = await response.json();
+                    if (result.id) {
+                      console.log(`Verification code sent via mail service successfully: ${result.id}`);
+                    } else {
+                      console.error('Mail service did not return expected ID');
+                      throw new Error('Invalid response from mail service');
+                    }
+                  } else {
+                    console.error(`Mail service failed: ${response.status}`);
+                    throw new Error(`Mail service returned ${response.status}`);
+                  }
+                } catch (mailError) {
+                  console.error('Failed to send via mail service:', mailError);
+                  console.log(`FALLBACK - Verification code for ${email}: ${code}`);
+                }
               }
             },
             copy: {
