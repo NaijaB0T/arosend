@@ -84,11 +84,10 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, transferId }) 
     }
   }, [file.url, mediaType]);
   
-  // Set loading to false for non-previewable media types immediately
+  // Set loading to false for all media types initially - let the media elements handle their own loading
   useEffect(() => {
-    if (mediaType === 'document' || mediaType === 'other') {
-      setIsLoading(false);
-    }
+    console.log(`💡 Setting initial loading state for ${mediaType}`);
+    setIsLoading(false);
   }, [mediaType]);
   
   useEffect(() => {
