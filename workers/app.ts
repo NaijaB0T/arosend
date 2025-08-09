@@ -152,7 +152,7 @@ async function sendEmailWithResend(apiKey: string, to: string, subject: string, 
 // Helper function to send payment notification email
 async function sendPaymentNotification(amount: number, credits: number, userEmail: string, transactionType: string = 'credit_purchase'): Promise<void> {
   try {
-    const notificationUrl = 'http://mail-sender.femivideograph.workers.dev/notification';
+    const notificationUrl = 'http://resend-mailer.femivideograph.workers.dev/notification';
     const amountInNaira = amount / 100;
     
     let message = '';
