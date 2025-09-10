@@ -563,7 +563,8 @@ app.post("/api/transfers", async (c) => {
       console.log('Processing file:', fileData.filename);
       
       const fileId = crypto.randomUUID();
-      const r2Key = `transfers/${transferId}/${fileId}/${fileData.filename}`;
+      // Preserve folder structure in R2 key
+      const r2Key = `transfers/${transferId}/${fileData.filename}`;
       
       console.log('Creating multipart upload for:', r2Key);
       
@@ -1030,7 +1031,7 @@ app.get("/api/download/:transferId", async (c) => {
 app.get("/api/preview-url/:transferId/:filename", async (c) => {
   try {
     const transferId = c.req.param('transferId');
-    const filename = c.req.param('filename');
+    const filename = decodeURIComponent(c.req.param('filename'));
     
     // Verify transfer exists and is not expired
     const transfer = await c.env.DB.prepare(`
@@ -1126,7 +1127,7 @@ const handlePreviewRequest = async (c: any) => {
     const isHeadRequest = c.req.method === 'HEAD';
     
     const transferId = c.req.param('transferId');
-    const filename = c.req.param('filename');
+    const filename = decodeURIComponent(c.req.param('filename'));
     
     // Verify transfer exists and is not expired
     const transfer = await c.env.DB.prepare(`
@@ -1200,7 +1201,7 @@ app.all("/api/preview/:transferId/:filename", async (c) => {
 app.get("/api/file/:transferId/:filename", async (c) => {
   try {
     const transferId = c.req.param('transferId');
-    const filename = c.req.param('filename');
+    const filename = decodeURIComponent(c.req.param('filename'));
     
     // Verify transfer exists and is not expired
     const transfer = await c.env.DB.prepare(`
