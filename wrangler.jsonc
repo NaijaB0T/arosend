@@ -34,6 +34,9 @@
   "observability": {
     "enabled": true
   },
+
+  // THE CLOUDFLARE ACCOUNT ID = 9c6a7bfd9f4245f30a73da1e40e96853
+
   /**
    * Smart Placement
    * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

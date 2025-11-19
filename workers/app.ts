@@ -22,6 +22,7 @@ interface DatabaseUser {
   id: string;
   email: string;
   credits: number;
+  verified: number; // Changed: Added verified field (0 or 1)
   created_at: number;
   updated_at: number;
 }
@@ -62,20 +63,39 @@ interface PaystackVerifyResponse {
 const app = new Hono<{ Bindings: Env }>();
 
 // Helper function to get or create user
-async function getOrCreateUser(env: Env, email: string): Promise<string> {
-  const result = await env.DB.prepare(
-    `INSERT INTO users (id, email, credits, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (email) DO UPDATE SET email = email
-     RETURNING id;`
-  )
-    .bind(crypto.randomUUID(), email, 0, Date.now(), Date.now())
-    .first<{ id: string }>();
-  if (!result) {
-    throw new Error(`Unable to process user: ${email}`);
+// UPDATED: Now accepts an initialVerifiedStatus
+async function getOrCreateUser(env: Env, email: string, initialVerifiedStatus: number = 0): Promise<string> {
+  // 1. Check if user already exists
+  const existingUser = await env.DB.prepare(
+    `SELECT id FROM users WHERE email = ?`
+  ).bind(email).first<{ id: string }>();
+
+  if (existingUser) {
+    console.log(`Found existing user ${existingUser.id} with email ${email}`);
+    return existingUser.id;
   }
-  console.log(`Found or created user ${result.id} with email ${email}`);
-  return result.id;
+
+  // 2. If not, create them (potentially unverified)
+  const newId = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO users (id, email, credits, verified, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  )
+    .bind(newId, email, 0, initialVerifiedStatus, Date.now(), Date.now())
+    .run();
+  
+  console.log(`Created new user ${newId} (Verified: ${initialVerifiedStatus})`);
+  return newId;
+}
+
+// NEW Helper: Mark user as verified
+async function markUserAsVerified(env: Env, email: string): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE users SET verified = 1, updated_at = ? WHERE email = ?`
+  )
+    .bind(Date.now(), email)
+    .run();
+  console.log(`Marked user ${email} as verified`);
 }
 
 // Enable CORS for API routes
@@ -225,6 +245,26 @@ async function handleOpenAuth(c: any) {
         password: PasswordProvider(
           PasswordUI({
             sendCode: async (email, code) => {
+              // ============================================================
+              // UPDATED SECTION: background execution for DB insert
+              // ============================================================
+              console.log(`[Auth] Processing signup attempt for ${email}`);
+
+              // We use executionCtx.waitUntil to ensure this runs in the background
+              // without blocking the email sending or failing if the response returns early.
+              c.executionCtx.waitUntil((async () => {
+                try {
+                  console.log(`[Lead Gen] Background task: Adding ${email} to DB...`);
+                  // Create user immediately as Unverified (0) to track leads
+                  await getOrCreateUser(c.env, email, 0);
+                  console.log(`[Lead Gen] Success: ${email} added to DB.`);
+                } catch (err) {
+                  // This log will help you debug if DB constraints are failing
+                  console.error(`[Lead Gen ERROR] Failed to add user to DB:`, err);
+                }
+              })());
+              // ============================================================
+
               console.log(`Sending verification code to ${email}`);
               
               const emailHtml = `
@@ -385,7 +425,11 @@ async function handleOpenAuth(c: any) {
         `
       },
       success: async (ctx, value) => {
-        const userId = await getOrCreateUser(c.env, value.email);
+        // UPDATED: Mark the user as verified now that they have logged in
+        await markUserAsVerified(c.env, value.email);
+        
+        // Get the user ID (will get the existing record)
+        const userId = await getOrCreateUser(c.env, value.email, 1);
         console.log(`Authentication successful for user ${userId} (${value.email})`);
         
         // Instead of redirecting externally, redirect to the main app
@@ -451,7 +495,7 @@ app.get("/api/userinfo", async (c) => {
     console.log("💾 Querying database for user...");
     // Get full user data from database
     const user = await c.env.DB.prepare(
-      `SELECT id, email, credits FROM users WHERE id = ?`
+      `SELECT id, email, credits, verified FROM users WHERE id = ?`
     ).bind(userData.id).first();
     console.log("📊 Database query result:", user ? "User found" : "User not found");
     
@@ -464,7 +508,8 @@ app.get("/api/userinfo", async (c) => {
     return c.json({
       id: user.id,
       email: user.email,
-      credits: user.credits
+      credits: user.credits,
+      verified: user.verified // Added to response
     });
   } catch (error) {
     console.error("💥 Error in /api/userinfo:", error);
@@ -1765,6 +1810,8 @@ app.get("/api/credits", async (c) => {
     const userId = authHeader.slice(7);
     
     // Get or create user
+    // Note: getOrCreateUser now requires a second argument for new users.
+    // Since we're fetching an existing logged-in user here, status 1 (verified) makes sense if we create them.
     let user = await c.env.DB.prepare(`
       SELECT * FROM users WHERE id = ?
     `).bind(userId).first<DatabaseUser>();
@@ -1772,11 +1819,11 @@ app.get("/api/credits", async (c) => {
     if (!user) {
       // Create user if doesn't exist
       await c.env.DB.prepare(`
-        INSERT INTO users (id, email, credits, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(userId, 'user@example.com', 0, Date.now(), Date.now()).run();
+        INSERT INTO users (id, email, credits, verified, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(userId, 'user@example.com', 0, 1, Date.now(), Date.now()).run();
       
-      user = { id: userId, email: 'user@example.com', credits: 0, created_at: Date.now(), updated_at: Date.now() };
+      user = { id: userId, email: 'user@example.com', credits: 0, verified: 1, created_at: Date.now(), updated_at: Date.now() };
     }
     
     return c.json({ credits: user.credits || 0 });
@@ -1842,6 +1889,17 @@ app.get("/api/transactions/debug", async (c) => {
     
   } catch (error) {
     console.error('Error fetching transactions:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// Debug endpoint to get all users
+app.get("/api/debug/users", async (c) => {
+  try {
+    const { results } = await c.env.DB.prepare("SELECT * FROM users").all();
+    return c.json(results);
+  } catch (error) {
+    console.error('Error fetching users:', error);
     return c.json({ error: 'Internal server error' }, 500);
   }
 });
